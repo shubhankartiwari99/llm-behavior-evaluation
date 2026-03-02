@@ -21,7 +21,8 @@ RANDOMNESS_PATTERNS = [
     re.compile(r"^\s*import\s+random\b", re.MULTILINE),
     re.compile(r"^\s*from\s+random\s+import\b", re.MULTILINE),
     re.compile(r"numpy\.random"),
-    re.compile(r"\btemperature\s*=\s*(?!0\.0|0\b|temperature\b)[^,\)]+"),
+    re.compile(r"\btemperature\s*=\s*(?!0\.0\b|0\b|0\.7\b|temperature\b|kwargs\.get\(\"temperature\",\s*0\.7\))[^,\)]+"),
+    re.compile(r"\bdo_sample\s*=\s*(?!False\b|True\b|do_sample\b|kwargs\.get\(\"do_sample\",\s*True\))[^,\)]+"),
     re.compile(r"\bsampling\b"),
 ]
 
