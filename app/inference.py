@@ -3,7 +3,7 @@ import json
 import copy
 import torch
 import re
-import time
+import datetime
 from typing import Optional
 from app.engine_config import MODEL_BACKEND
 from app.model_loader import ModelLoader
@@ -1774,9 +1774,9 @@ class InferenceEngine:
                         return self._pack(final_text, meta, return_meta)
                     best_explanatory = (final_text, meta)
 
-        start_time = time.time()
+        start_time = datetime.datetime.now()
         raw_cleaned = self._model_generate_cleaned(conditioned_prompt, max_new_tokens=max_new_tokens, **kwargs)
-        latency = int((time.time() - start_time) * 1000)
+        latency = int((datetime.datetime.now() - start_time).total_seconds() * 1000)
         
         if isinstance(raw_cleaned, tuple):
             cleaned, output_meta = raw_cleaned
