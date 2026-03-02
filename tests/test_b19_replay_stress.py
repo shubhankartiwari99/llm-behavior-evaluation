@@ -104,7 +104,7 @@ def _run_case(
         engine._model_generate_cleaned = lambda *_args, **_kwargs: MODEL_SENTINEL
         monkeypatch.setattr("app.inference.apply_response_policies", lambda text, **_kwargs: text)
         engine._post_process_response = (
-            lambda prompt, intent, lang, conditioned_prompt, text, meta, max_new_tokens, resolution: (text, meta)
+            lambda prompt, intent, lang, conditioned_prompt, text, meta, max_new_tokens, resolution, guardrail_result=None: (text, meta)
         )
 
     response_text, _meta = engine.generate(prompt, return_meta=True)

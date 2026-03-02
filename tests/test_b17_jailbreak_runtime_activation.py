@@ -156,7 +156,7 @@ def test_b17_safe_flow_unaffected(monkeypatch):
     )
     engine.memory = _MemoryStub("I hear you. That sounds tough. I'm here for you.")
     engine._post_process_response = (
-        lambda prompt, intent, lang, conditioned_prompt, text, meta, max_new_tokens, resolution: (text, meta)
+        lambda prompt, intent, lang, conditioned_prompt, text, meta, max_new_tokens, resolution, guardrail_result=None: (text, meta)
     )
     response, meta = engine.generate("hello", return_meta=True)
     assert response == "I hear you. That sounds tough. I'm here for you."

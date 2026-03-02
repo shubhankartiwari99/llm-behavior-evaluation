@@ -4,3 +4,6 @@ llama-cpp-python
 pydantic
 sentence-transformers
 numpy
+transformers
+accelerate
+torch

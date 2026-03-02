@@ -1,1 +1,1 @@
-MODEL_BACKEND = "remote"  # or "gguf" or "mt5"
+MODEL_BACKEND = "hf"

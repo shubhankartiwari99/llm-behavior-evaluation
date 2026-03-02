@@ -1058,7 +1058,7 @@ class InferenceEngine:
         )
         return normalize_output(decoded)
 
-    def _model_generate_cleaned(self, conditioned_prompt: str, max_new_tokens: int) -> str:
+    def _model_generate_cleaned(self, conditioned_prompt: str, max_new_tokens: int, **kwargs) -> str:
         print("REMOTE MODEL CALLED")  # Debug print to confirm model is being called
         
         # Strip the prefix (empathy:, fact:, etc.) before sending to remote model
@@ -1084,9 +1084,14 @@ class InferenceEngine:
                 "Assistant:"
             )
             return self.backend.generate(formatted, max_new_tokens)
-        elif MODEL_BACKEND == "remote":
-            # Remote backend handles personality wrapper
-            return self.backend.generate(user_text, max_new_tokens)
+        elif MODEL_BACKEND == "hf":
+            return self.backend.generate(
+                prompt=user_text,
+                max_new_tokens=max_new_tokens,
+                temperature=kwargs.get("temperature", 0.7),
+                top_p=kwargs.get("top_p", 0.9),
+                do_sample=kwargs.get("do_sample", True),
+            )
 
     def _build_explanatory_shape_prompt(self, prompt: str, conditioned_prompt: str) -> str:
         constraints = self._explanatory_constraints(prompt)
@@ -1255,8 +1260,7 @@ class InferenceEngine:
 
                 # One controlled re-generation pass with an explicit structure contract.
                 shaped_prompt = self._build_explanatory_shape_prompt(prompt, conditioned_prompt)
-                regenerated = self._model_generate_cleaned(shaped_prompt, max_new_tokens=max_new_tokens)
-                regenerated_final = apply_response_policies(regenerated, intent=intent, lang=lang, prompt=prompt)
+                regenerated = self._model_generate_cleaned(shaped_prompt, max_new_tokens=max_new_tokens, **kwargs)
                 regenerated_final = self._shape_explanatory(prompt, regenerated_final)
                 if self._is_explanatory_on_topic(prompt, regenerated_final) and (not self._needs_explanatory_regen(prompt, regenerated_final)):
                     meta = dict(meta)
@@ -1275,7 +1279,7 @@ class InferenceEngine:
         return text, meta
 
     def __init__(self, model_dir: str):
-        if MODEL_BACKEND not in ("gguf", "remote"):
+        if MODEL_BACKEND not in ("gguf", "hf"):
             verify_runtime_identity(strict=True)
         self.memory = AlignmentMemory()
 
@@ -1294,9 +1298,9 @@ class InferenceEngine:
             self.tokenizer = None
             self.device = None
             self.bad_words_ids = []
-        elif MODEL_BACKEND == "remote":
-            from app.backends.remote_backend import RemoteBackend
-            self.backend = RemoteBackend()
+        elif MODEL_BACKEND == "hf":
+            from app.backends.hf_backend import HFBackend
+            self.backend = HFBackend()
             self.model = None
             self.tokenizer = None
             self.device = None
@@ -1593,7 +1597,7 @@ class InferenceEngine:
         return intent, lang, conditioned_prompt, emotional_resolution
 
     @torch.no_grad()
-    def generate(self, prompt: str, max_new_tokens: int = 96, return_meta: bool = False):
+    def generate(self, prompt: str, max_new_tokens: int = 96, return_meta: bool = False, **kwargs):
         guardrail_result = classify_user_input(prompt)
         guardrail_action = apply_guardrail_strategy(guardrail_result)
         if guardrail_action.override:
@@ -1769,7 +1773,7 @@ class InferenceEngine:
                         return self._pack(final_text, meta, return_meta)
                     best_explanatory = (final_text, meta)
 
-        cleaned = self._model_generate_cleaned(conditioned_prompt, max_new_tokens=max_new_tokens)
+        cleaned = self._model_generate_cleaned(conditioned_prompt, max_new_tokens=max_new_tokens, **kwargs)
         print(f"Model generated: {cleaned[:100] if cleaned else 'None'}...")
         final_text = apply_response_policies(cleaned, intent=intent, lang=lang, prompt=prompt)
 

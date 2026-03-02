@@ -238,7 +238,7 @@ def test_b19_a8_safe_must_call_model_and_override_false(monkeypatch):
     engine._model_generate_cleaned = lambda _prompt, max_new_tokens: model_sentinel
     monkeypatch.setattr("app.inference.apply_response_policies", lambda text, **_kwargs: text)
     engine._post_process_response = (
-        lambda prompt, intent, lang, conditioned_prompt, text, meta, max_new_tokens, resolution: (text, meta)
+        lambda prompt, intent, lang, conditioned_prompt, text, meta, max_new_tokens, resolution, guardrail_result=None: (text, meta)
     )
 
     response, _meta = engine.generate("hello", return_meta=True)
