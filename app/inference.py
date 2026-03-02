@@ -1674,6 +1674,7 @@ class InferenceEngine:
         )
         semantic_dropped_reason = None
         best_explanatory = None
+        meta = {}
 
         if intent == "factual":
             rule_hit, floor_id = self._factual_floor_answer(prompt, lang)
