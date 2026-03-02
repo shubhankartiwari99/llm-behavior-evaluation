@@ -3,6 +3,7 @@ import json
 import copy
 import torch
 import re
+import time
 from typing import Optional
 from app.engine_config import MODEL_BACKEND
 from app.model_loader import ModelLoader
@@ -1059,8 +1060,7 @@ class InferenceEngine:
         return normalize_output(decoded)
 
     def _model_generate_cleaned(self, conditioned_prompt: str, max_new_tokens: int, **kwargs) -> str:
-        print("REMOTE MODEL CALLED")  # Debug print to confirm model is being called
-        
+        # Strip the prefix (empathy:, fact:, etc.) before sending to remote model
         # Strip the prefix (empathy:, fact:, etc.) before sending to remote model
         # The local prefix system is leaking into remote calls
         match = self.PREFIX_RE.match(conditioned_prompt)
@@ -1774,12 +1774,19 @@ class InferenceEngine:
                         return self._pack(final_text, meta, return_meta)
                     best_explanatory = (final_text, meta)
 
+        start_time = time.time()
         raw_cleaned = self._model_generate_cleaned(conditioned_prompt, max_new_tokens=max_new_tokens, **kwargs)
+        latency = int((time.time() - start_time) * 1000)
+        
         if isinstance(raw_cleaned, tuple):
             cleaned, output_meta = raw_cleaned
             meta.update(output_meta)
         else:
             cleaned = raw_cleaned
+            
+        meta["latency_ms"] = latency
+        if "input_tokens" not in meta:
+            meta["input_tokens"] = len(self.tokenizer.encode(conditioned_prompt)) if hasattr(self, "tokenizer") and self.tokenizer else len(conditioned_prompt.split())
             
         print(f"Model generated: {cleaned[:100] if cleaned else 'None'}...")
         final_text = apply_response_policies(cleaned, intent=intent, lang=lang, prompt=prompt)

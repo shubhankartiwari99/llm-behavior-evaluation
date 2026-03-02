@@ -35,7 +35,7 @@ def evaluate_dual_plane(det_output: str, ent_output: str, det_tokens: int, ent_t
 
     instability = min(instability, 1.0)
     confidence = 1 - instability
-    escalate = instability > 0.45
+    escalate = instability > 0.38
 
     return {
         "instability": round(instability, 3),
