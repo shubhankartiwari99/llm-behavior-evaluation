@@ -1263,6 +1263,7 @@ class InferenceEngine:
                 # One controlled re-generation pass with an explicit structure contract.
                 shaped_prompt = self._build_explanatory_shape_prompt(prompt, conditioned_prompt)
                 regenerated = self._model_generate_cleaned(shaped_prompt, max_new_tokens=max_new_tokens, **kwargs)
+                regenerated_final = apply_response_policies(regenerated, intent=intent, lang=lang, prompt=prompt)
                 regenerated_final = self._shape_explanatory(prompt, regenerated_final)
                 if self._is_explanatory_on_topic(prompt, regenerated_final) and (not self._needs_explanatory_regen(prompt, regenerated_final)):
                     meta = dict(meta)
