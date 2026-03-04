@@ -1602,11 +1602,8 @@ class InferenceEngine:
         return intent, lang, conditioned_prompt, emotional_resolution
 
     def generate(self, prompt: str, max_new_tokens: int = 96, return_meta: bool = False, **kwargs):
-        import time
-        start_time = time.time()
         res = self._generate_internal(prompt, max_new_tokens, True, **kwargs)
         text, meta = res
-        meta["latency_ms"] = int((time.time() - start_time) * 1000)
         if "input_tokens" not in meta:
             # Approximate fallback if backend didn't provide it
             meta["input_tokens"] = len(prompt.split()) * 2
@@ -1795,9 +1792,7 @@ class InferenceEngine:
                         return self._pack(final_text, meta, return_meta)
                     best_explanatory = (final_text, meta)
 
-        start_time = datetime.datetime.now()
         raw_cleaned = self._model_generate_cleaned(conditioned_prompt, max_new_tokens=max_new_tokens, **kwargs)
-        latency = int((datetime.datetime.now() - start_time).total_seconds() * 1000)
         
         if isinstance(raw_cleaned, tuple):
             cleaned, output_meta = raw_cleaned
@@ -1805,7 +1800,6 @@ class InferenceEngine:
         else:
             cleaned = raw_cleaned
             
-        meta["latency_ms"] = latency
         if "input_tokens" not in meta:
             meta["input_tokens"] = len(self.tokenizer.encode(conditioned_prompt)) if hasattr(self, "tokenizer") and self.tokenizer else len(conditioned_prompt.split())
             

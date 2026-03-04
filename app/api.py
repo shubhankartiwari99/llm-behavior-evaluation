@@ -4,6 +4,7 @@ import hashlib
 import logging
 import json
 import os
+import datetime
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -266,6 +267,7 @@ async def generate_text(request: Request):
         structured_prompt = build_prompt(validated.get("mode", ""), validated["prompt"])
         
         # Deterministic
+        _t0 = datetime.datetime.now()
         det_response_text, det_meta = runtime_engine.generate(
             structured_prompt,
             return_meta=True,
@@ -318,9 +320,11 @@ async def generate_text(request: Request):
             "det_entropy_similarity": analysis["det_entropy_similarity"],
         }
 
+        _latency_ms = round((datetime.datetime.now() - _t0).total_seconds() * 1000, 2)
+
         response_payload = {
             "response_text": det_response_text,
-            "latency_ms": det_meta.get("latency_ms", 0),
+            "latency_ms": _latency_ms,
             "input_tokens": det_meta.get("input_tokens", 0),
             "output_tokens": det_token_count,
             "confidence": analysis["confidence"],
