@@ -23,8 +23,9 @@ def normalize_output(text: str) -> str:
     # Remove sentinel tokens
     cleaned = EXTRA_ID_PATTERN.sub("", text)
 
-    # Remove leaked task prefixes from decoder output.
+    # Remove leaked task prefixes and assistant markers from decoder output.
     cleaned = TASK_PREFIX_PATTERN.sub("", cleaned)
+    cleaned = re.sub(r"^(?:Assistant|AI|Assistant:|AI:)\s*", "", cleaned, flags=re.IGNORECASE)
 
     # Normalize whitespace
     cleaned = " ".join(cleaned.split())

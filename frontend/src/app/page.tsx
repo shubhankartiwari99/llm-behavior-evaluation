@@ -1044,7 +1044,7 @@ function Panel({
 }) {
   return (
     <section
-      className={`rounded-xl border border-[#0dccf2]/20 bg-[#101f22]/75 p-4 md:p-5 shadow-[0_0_20px_rgba(13,204,242,0.06)] ${className}`}
+      className={`rounded-xl border border-[#0dccf2]/30 bg-[#101f22]/75 p-4 md:p-5 shadow-[0_0_20px_rgba(13,204,242,0.06)] backdrop-blur ${className}`}
     >
       <header className="mb-3 border-b border-[#0dccf2]/10 pb-2">
         <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-[#0dccf2]">{title}</h2>
@@ -1109,6 +1109,8 @@ export default function Home() {
   const [experimentError, setExperimentError] = useState<string | null>(null)
   const [experimentResults, setExperimentResults] = useState<ExperimentResult[]>([])
   const [stabilityData, setStabilityData] = useState<TemperatureAggregatePoint[]>([])
+  const [showSamples, setShowSamples] = useState(false)
+  const [showMCDiagnostics, setShowMCDiagnostics] = useState(true)
   const [clockText, setClockText] = useState("--:--:--")
 
   const monteCarlo = useMemo(() => {
@@ -1350,6 +1352,16 @@ export default function Home() {
       setCoreComparison(data.core_comparison ?? null)
       setTrace(data.trace ?? null)
       setReviewPacket(data.review_packet ?? null)
+
+      // Store run history for stability curve
+      setStabilityData((prev) => {
+        const newPoint = { temperature: config.temperature, value: data.instability }
+        // Keep unique points or just append? User said "store run history".
+        // Let's filter out existing points for the same temperature for a cleaner graph, or keep them all if they want a scatter.
+        // Recharts LineChart handles multiple points for same X but usually they are sorted.
+        const updated = [...prev, newPoint].sort((a, b) => a.temperature - b.temperature)
+        return updated
+      })
     } catch (error) {
       const message = error instanceof Error ? error.message : "Inference server unavailable."
       setErrorMessage(message)
@@ -1585,39 +1597,40 @@ export default function Home() {
         </div>
       </header>
 
-      <section className="border-b border-[#0dccf2]/15 bg-[#0f181c]/95 px-4 py-2 md:px-6">
-        <div className="flex gap-3 overflow-x-auto pb-1">
-          <RibbonMetric
-            label="Confidence"
-            value={result ? result.confidence.toFixed(3) : "--"}
-            tone={confidenceTone}
-          />
-          <RibbonMetric
-            label="Instability"
-            value={result ? result.instability.toFixed(3) : "--"}
-            tone={localInstabilityTone}
-          />
-          <RibbonMetric
-            label="Latency"
-            value={result ? `${result.latency_ms} ms` : "--"}
-          />
-          <RibbonMetric
-            label="Tokens"
-            value={result ? `${result.input_tokens} -> ${result.output_tokens}` : "--"}
-          />
-          <RibbonMetric
-            label="Escalation"
-            value={result ? (result.escalate ? "TRUE" : "FALSE") : "--"}
-            tone={escalationTone}
-          />
+      <section className="border-b border-[#0dccf2]/15 bg-[#0f181c]/95 px-4 py-3 md:px-6">
+        <div className="flex flex-col gap-4">
+          {/* Row 1 - Reliability */}
+          <div className="flex gap-4 overflow-x-auto pb-1">
+            <RibbonMetric
+              label="Confidence"
+              value={result ? result.confidence.toFixed(3) : "--"}
+              tone={confidenceTone}
+            />
+            <RibbonMetric
+              label="Instability"
+              value={result ? result.instability.toFixed(3) : "--"}
+              tone={localInstabilityTone}
+            />
+            <RibbonMetric
+              label="Uncertainty"
+              value={result ? (result.uncertainty?.toFixed(3) || "0.000") : "--"}
+              tone={uncertaintyTone}
+            />
+            <RibbonMetric
+              label="Escalation"
+              value={result ? (result.escalate ? "TRUE" : "FALSE") : "--"}
+              tone={escalationTone}
+            />
+          </div>
         </div>
       </section>
 
       <main className="min-h-0 flex-1 overflow-hidden p-4 md:p-6">
-        <div className="grid min-h-0 gap-4 lg:h-full lg:grid-rows-[minmax(0,1fr)_minmax(240px,36%)]">
-          <div className="grid min-h-0 grid-cols-1 gap-4 xl:grid-cols-[minmax(280px,30%)_minmax(0,45%)_minmax(240px,25%)]">
+        <div className="grid h-full grid-cols-1 gap-6 lg:grid-cols-2 overflow-y-auto pr-1">
+          {/* Top Left: Prompt Lab */}
+          <div className="flex flex-col gap-6">
             <Panel title="Prompt Lab" subtitle="Prompt + controls + run" className="min-h-0 flex flex-col">
-              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+              <div className="min-h-0 flex-1 space-y-4 pr-1">
                 <div className="space-y-2">
                   <label className="text-xs uppercase tracking-[0.14em] text-slate-400">Prompt</label>
                   <textarea
@@ -1726,232 +1739,8 @@ export default function Home() {
               </div>
             </Panel>
 
-            <Panel title="Core A / Core B" subtitle="Final output plus deterministic/entropy comparison" className="min-h-0 flex flex-col">
-              <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
-                <div className="rounded-lg border border-[#0dccf2]/20 bg-black/25 p-3">
-                  <p className="mb-2 text-[11px] uppercase tracking-[0.14em] text-slate-400">Final Output</p>
-                  <div className="max-h-[350px] overflow-y-auto pr-1">
-                    {result ? (
-                      <p className="whitespace-pre-wrap text-sm leading-6 text-slate-100">{result.response_text}</p>
-                    ) : (
-                      <p className="text-sm text-slate-500">Run a prompt to view output.</p>
-                    )}
-                  </div>
-                </div>
-
-                {errorMessage ? (
-                  <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
-                    {errorMessage}
-                  </div>
-                ) : null}
-
-                <button
-                  type="button"
-                  onClick={() => setShowCoreComparison((prev) => !prev)}
-                  className="inline-flex items-center gap-2 rounded-lg border border-[#0dccf2]/20 bg-black/25 px-3 py-2 text-xs uppercase tracking-[0.12em] text-slate-200"
-                >
-                  {comparisonVisible ? <ChevronDown className="h-4 w-4 text-[#0dccf2]" /> : <ChevronRight className="h-4 w-4 text-[#0dccf2]" />}
-                  Compare Cores
-                  {result?.escalate ? <span className="ml-1 text-red-400">(auto: escalation)</span> : null}
-                </button>
-
-                {comparisonVisible ? (
-                  <div className="space-y-3 rounded-lg border border-[#0dccf2]/20 bg-black/20 p-3">
-                    {coreComparison ? (
-                      <>
-                        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-                          <div className="rounded-lg border border-[#0dccf2]/15 bg-black/25 p-3">
-                            <p className="mb-2 text-[11px] uppercase tracking-[0.14em] text-slate-400">Core A (Deterministic)</p>
-                            <div className="max-h-36 overflow-y-auto text-sm text-slate-200">
-                              {coreComparison.core_a_output || "-"}
-                            </div>
-                          </div>
-                          <div className="rounded-lg border border-[#0dccf2]/15 bg-black/25 p-3">
-                            <p className="mb-2 text-[11px] uppercase tracking-[0.14em] text-slate-400">Core B (Entropy)</p>
-                            <div className="max-h-36 overflow-y-auto text-sm text-slate-200">
-                              {coreComparison.core_b_output || "-"}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-                          <MetricCard label="Similarity" value={coreComparison.embedding_similarity.toFixed(3)} />
-                          <MetricCard label="Token Delta" value={coreComparison.token_delta.toFixed(0)} />
-                          <MetricCard label="Length Delta" value={coreComparison.length_delta.toFixed(0)} />
-                        </div>
-                      </>
-                    ) : (
-                      <p className="text-sm text-slate-500">Core comparison data unavailable for this run.</p>
-                    )}
-                  </div>
-                ) : null}
-              </div>
-            </Panel>
-
-            <div className="min-h-0 space-y-4 overflow-y-auto pr-1">
-              <Panel title="Reliability" subtitle="Confidence and instability view" className="flex-none">
-                {result ? (
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-2 gap-2 lg:grid-cols-3 xl:grid-cols-4">
-                      <MetricCard label="Confidence" value={result.confidence.toFixed(3)} tone="text-emerald-400" />
-                      <MetricCard label="Instability" value={result.instability.toFixed(3)} tone="text-amber-300" />
-                      <MetricCard
-                        label="Entropy"
-                        value={typeof result.entropy === "number" ? result.entropy.toFixed(3) : "n/a"}
-                        tone={localEntropyTone}
-                      />
-                      <MetricCard
-                        label="Self-consistency"
-                        value={typeof result.self_consistency === "number" ? result.self_consistency.toFixed(3) : "n/a"}
-                        tone={
-                          typeof result.self_consistency === "number"
-                            ? result.self_consistency >= 0.65
-                              ? "text-emerald-400"
-                              : result.self_consistency >= 0.45
-                                ? "text-amber-300"
-                                : "text-red-400"
-                            : "text-slate-400"
-                        }
-                      />
-                      <MetricCard
-                        label="Uncertainty Score"
-                        value={typeof result.uncertainty === "number" ? result.uncertainty.toFixed(3) : "n/a"}
-                        tone={uncertaintyTone}
-                      />
-                      <MetricCard
-                        label="Escalation"
-                        value={result.escalate ? "TRUE" : "FALSE"}
-                        tone={result.escalate ? "text-red-400" : "text-emerald-400"}
-                      />
-                      <MetricCard
-                        label="Uncertainty Level"
-                        value={
-                          isRecord(monteCarlo) && typeof monteCarlo.uncertainty_level === "string"
-                            ? monteCarlo.uncertainty_level.toUpperCase()
-                            : "n/a"
-                        }
-                      />
-                    </div>
-
-                    <div className="rounded-lg border border-[#0dccf2]/15 bg-black/25 p-3">
-                      <p className="mb-2 text-[11px] uppercase tracking-[0.14em] text-slate-400">Instability Meter</p>
-                      <div className="h-3 overflow-hidden rounded bg-[#0dccf2]/15">
-                        <div
-                          className={`h-full ${result.escalate ? "bg-red-500" : "bg-emerald-500"}`}
-                          style={{ width: `${(instabilityPercent * 100).toFixed(2)}%` }}
-                        />
-                      </div>
-                      <p className="mt-2 font-mono text-xs text-slate-300">{result.instability.toFixed(3)}</p>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <MetricCard
-                        label="Det vs Ent Similarity"
-                        value={
-                          isRecord(monteCarlo) && typeof monteCarlo.det_entropy_similarity === "number"
-                            ? monteCarlo.det_entropy_similarity.toFixed(3)
-                            : "n/a"
-                        }
-                      />
-                      <MetricCard
-                        label="Entropy Consistency"
-                        value={
-                          isRecord(monteCarlo) && typeof monteCarlo.entropy_consistency === "number"
-                            ? monteCarlo.entropy_consistency.toFixed(3)
-                            : "n/a"
-                        }
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-sm text-slate-500">No reliability data yet.</p>
-                )}
-              </Panel>
-
-              {/* Semantic Clusters Panel (Live Inference) */}
-              {result?.cluster_count !== undefined && (
-                <Panel title="Semantic Clusters" subtitle="Clustered interpretation from Monte Carlo samples" className="mt-4">
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                    <MetricCard
-                      label="Clusters Count"
-                      value={result.cluster_count.toString()}
-                      tone={result.cluster_count > 1 ? "text-amber-300" : "text-emerald-400"}
-                    />
-                    <MetricCard
-                      label="Cluster Entropy"
-                      value={result.cluster_entropy?.toFixed(3) ?? "n/a"}
-                      tone={result.cluster_entropy && result.cluster_entropy > 0.4 ? "text-amber-300" : "text-emerald-400"}
-                    />
-                    <MetricCard
-                      label="Dominant Cluster %"
-                      value={result.dominant_cluster_ratio ? `${(result.dominant_cluster_ratio * 100).toFixed(1)}%` : "n/a"}
-                      tone={result.dominant_cluster_ratio && result.dominant_cluster_ratio < 0.6 ? "text-amber-300" : "text-emerald-400"}
-                    />
-                  </div>
-                </Panel>
-              )}
-              <Panel title="Telemetry" subtitle="Latency and token accounting">
-                {result ? (
-                  <div className="grid grid-cols-2 gap-2 lg:grid-cols-3 xl:grid-cols-3">
-                    <MetricCard label="Latency" value={`${result.latency_ms} ms`} />
-                    <MetricCard label="Input Tokens" value={result.input_tokens.toString()} />
-                    <MetricCard label="Output Tokens" value={result.output_tokens.toString()} />
-                    <MetricCard
-                      label="Samples Used"
-                      value={`${result.samples_used} / ${config.monte_carlo_samples}`}
-                    />
-                    <MetricCard
-                      label="Entropy Variance"
-                      value={
-                        isRecord(monteCarlo) && typeof monteCarlo.entropy_variance === "number"
-                          ? monteCarlo.entropy_variance.toFixed(3)
-                          : "n/a"
-                      }
-                    />
-                    <MetricCard
-                      label="Semantic Dispersion"
-                      value={
-                        isRecord(monteCarlo) && typeof monteCarlo.semantic_dispersion === "number"
-                          ? monteCarlo.semantic_dispersion.toFixed(3)
-                          : "n/a"
-                      }
-                    />
-                  </div>
-                ) : (
-                  <p className="text-sm text-slate-500">Telemetry appears after running inference.</p>
-                )}
-              </Panel>
-
-              <Panel title="MODEL STABILITY CURVE" subtitle="Temperature vs Instability">
-                <StabilityChart data={stabilityData} />
-              </Panel>
-
-              {result?.escalate ? (
-                <Panel title="Escalation" subtitle="Uncertainty diagnostics">
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <div className="space-y-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3">
-                      <p className="text-[10px] uppercase tracking-[0.12em] text-red-300">Uncertainty Level</p>
-                      <p className="font-mono text-lg font-bold text-red-400">CRITICAL</p>
-                    </div>
-                    <div className="space-y-1 rounded-lg border border-[#0dccf2]/15 bg-black/25 p-3">
-                      <p className="font-mono text-xs text-slate-300">
-                        Similarity: {typeof reviewPacket?.embedding_similarity === "number"
-                          ? reviewPacket.embedding_similarity.toFixed(3)
-                          : "n/a"}
-                      </p>
-                      <p className="font-mono text-xs text-slate-300">
-                        Ambiguity: {typeof reviewPacket?.ambiguity === "number"
-                          ? reviewPacket.ambiguity.toFixed(3)
-                          : "n/a"}
-                      </p>
-                      <p className="font-mono text-xs text-slate-300">
-                        Samples: {reviewPacket?.entropy_samples?.length ?? 0}
-                      </p>
-                    </div>
-                  </div>
-                </Panel>
-              ) : null}
-
-              <Panel title="Trace" subtitle="Collapsible decision trace">
+            <Panel title="Trace" subtitle="Collapsible decision trace" className="flex-1 min-h-0 flex flex-col">
+              <div className="min-h-0 flex-1 overflow-y-auto pr-1">
                 <button
                   type="button"
                   onClick={() => setTraceExpanded((prev) => !prev)}
@@ -1963,7 +1752,7 @@ export default function Home() {
 
                 {traceExpanded ? (
                   trace ? (
-                    <div className="mt-3 space-y-2">
+                    <div className="mt-3 space-y-4">
                       {Object.entries(trace).map(([key, value]) => {
                         if (key === "monte_carlo_samples" && Array.isArray(value)) {
                           const groups: Record<number, string[]> = {}
@@ -1974,25 +1763,35 @@ export default function Home() {
                           })
                           return (
                             <div key={key} className="rounded-lg border border-[#0dccf2]/15 bg-black/25 p-3">
-                              <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#0dccf2]">
-                                Monte Carlo Reasoning Trace
-                              </p>
-                              <div className="space-y-4">
-                                {Object.entries(groups).map(([clusterId, texts]) => (
-                                  <div key={clusterId} className="space-y-2 border-l-2 border-[#0dccf2]/30 pl-3">
-                                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-300">
-                                      Cluster {clusterId}
-                                    </p>
-                                    <ul className="ml-4 list-disc space-y-1 text-xs text-slate-200">
-                                      {texts.map((t, idx) => (
-                                        <li key={idx} className="leading-relaxed">
-                                          {t}
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                ))}
+                              <div className="flex items-center justify-between mb-3 border-b border-[#0dccf2]/10 pb-2">
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#0dccf2]">
+                                  Monte Carlo Reasoning Trace
+                                </p>
+                                <button
+                                  onClick={() => setShowSamples(!showSamples)}
+                                  className="text-[10px] uppercase tracking-wider text-slate-400 hover:text-[#0dccf2]"
+                                >
+                                  {showSamples ? "Hide Samples ▲" : "Show Samples ▼"}
+                                </button>
                               </div>
+                              {showSamples && (
+                                <div className="space-y-4">
+                                  {Object.entries(groups).map(([clusterId, texts]) => (
+                                    <div key={clusterId} className="space-y-2 border-l-2 border-[#0dccf2]/30 pl-3">
+                                      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-300">
+                                        Cluster {clusterId}
+                                      </p>
+                                      <ul className="ml-4 list-disc space-y-1 text-xs text-slate-200">
+                                        {texts.map((t, idx) => (
+                                          <li key={idx} className="leading-relaxed">
+                                            {t}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           )
                         }
@@ -2011,108 +1810,229 @@ export default function Home() {
                     <p className="mt-3 text-sm text-slate-500">Run an inference to populate trace data.</p>
                   )
                 ) : null}
+              </div>
+            </Panel>
+          </div>
+
+          {/* Top Right: Core A / Core B */}
+          <div className="flex flex-col gap-6 overflow-y-auto pr-1">
+            <Panel title="Core Comparison" subtitle="Core A (Deterministic) vs Core B (Entropy)" className="flex-none">
+              <div className="space-y-4">
+                <div className="rounded-lg border border-[#0dccf2]/20 bg-black/25 p-3">
+                  <p className="mb-2 text-[11px] uppercase tracking-[0.14em] text-slate-400">Final Output</p>
+                  <div className="max-h-[320px] overflow-y-auto pr-1">
+                    {result ? (
+                      <p className="whitespace-pre-wrap text-sm leading-6 text-slate-100">{result.response_text}</p>
+                    ) : (
+                      <p className="text-sm text-slate-500">Run a prompt to view output.</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  <div className="rounded-lg border border-[#0dccf2]/15 bg-black/25 p-3">
+                    <p className="mb-2 text-[11px] uppercase tracking-[0.14em] text-slate-400">Core A (Deterministic)</p>
+                    <div className="max-h-[240px] overflow-y-auto text-sm text-slate-200 pr-1">
+                      {coreComparison?.core_a_output || "-"}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-[#0dccf2]/15 bg-black/25 p-3">
+                    <p className="mb-2 text-[11px] uppercase tracking-[0.14em] text-slate-400">Core B (Entropy)</p>
+                    <div className="max-h-[240px] overflow-y-auto text-sm text-slate-200 pr-1">
+                      {coreComparison?.core_b_output || "-"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </Panel>
+
+            <div className="grid grid-cols-1 gap-6">
+              <Panel title="Monte Carlo Diagnostics" subtitle="Semantic dispersion and cluster analysis">
+                {result?.cluster_count !== undefined ? (
+                  <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                    <MetricCard
+                      label="Cluster Count"
+                      value={result.cluster_count.toString()}
+                      tone={result.cluster_count > 1 ? "text-amber-300" : "text-emerald-400"}
+                    />
+                    <MetricCard
+                      label="Cluster Entropy"
+                      value={result.cluster_entropy?.toFixed(3) ?? "n/a"}
+                      tone={result.cluster_entropy && result.cluster_entropy > 0.4 ? "text-amber-300" : "text-emerald-400"}
+                    />
+                    <MetricCard
+                      label="Dominant Cluster %"
+                      value={result.dominant_cluster_ratio ? `${(result.dominant_cluster_ratio * 100).toFixed(1)}%` : "n/a"}
+                      tone={result.dominant_cluster_ratio && result.dominant_cluster_ratio < 0.6 ? "text-amber-300" : "text-emerald-400"}
+                    />
+                    <MetricCard
+                      label="Semantic Dispersion"
+                      value={result.semantic_dispersion?.toFixed(3) ?? "n/a"}
+                    />
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500">No Monte Carlo data yet.</p>
+                )}
+              </Panel>
+
+              <Panel title="Telemetry" subtitle="Runtime and token accounting">
+                {result ? (
+                  <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                    <MetricCard label="Latency" value={`${result.latency_ms} ms`} />
+                    <MetricCard label="Input Tokens" value={result.input_tokens.toString()} />
+                    <MetricCard label="Output Tokens" value={result.output_tokens.toString()} />
+                    <MetricCard
+                      label="Samples Used"
+                      value={`${result.samples_used} / ${config.monte_carlo_samples}`}
+                    />
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500">Telemetry appears after running inference.</p>
+                )}
+              </Panel>
+
+              {result?.escalate ? (
+                <Panel title="Uncertainty Trigger" subtitle="Orange diagnostic signal" className="border-orange-500/50">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="space-y-2 rounded-lg border border-orange-500/30 bg-orange-500/10 p-4">
+                      <p className="text-[10px] uppercase tracking-[0.12em] text-orange-300">Uncertainty Status</p>
+                      <p className="font-mono text-lg font-bold text-orange-400">TRIGGERED</p>
+                    </div>
+                    <div className="space-y-2 rounded-lg border border-[#0dccf2]/15 bg-black/25 p-4">
+                      <p className="font-mono text-xs text-slate-300">
+                        Embedding Similarity: {typeof reviewPacket?.embedding_similarity === "number"
+                          ? reviewPacket.embedding_similarity.toFixed(3)
+                          : "n/a"}
+                      </p>
+                      <p className="font-mono text-xs text-slate-300">
+                        Ambiguity Score: {typeof reviewPacket?.ambiguity === "number"
+                          ? reviewPacket.ambiguity.toFixed(3)
+                          : "n/a"}
+                      </p>
+                      <p className="font-mono text-xs text-slate-300">
+                        Entropy Variance: {isRecord(monteCarlo) && typeof monteCarlo.entropy_variance === "number"
+                          ? monteCarlo.entropy_variance.toFixed(3)
+                          : "n/a"}
+                      </p>
+                    </div>
+                  </div>
+                </Panel>
+              ) : null}
+
+              <Panel title="Model Stability Curve" subtitle="Temperature vs Instability history">
+                <div className="h-[240px]">
+                  <StabilityChart data={stabilityData} />
+                </div>
               </Panel>
             </div>
           </div>
+        </div>
+      </main>
 
-          <Panel
-            title="Experiment Runner"
-            subtitle="Dataset testing with confidence, instability and escalation tracking"
-            className="min-h-0 flex flex-col"
-          >
-            <div className="mb-4 flex flex-wrap items-center gap-3">
-              <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-[#0dccf2]/30 bg-black/25 px-3 py-2 text-xs uppercase tracking-[0.12em] text-slate-200 hover:border-[#0dccf2]/60">
-                <Upload className="h-4 w-4 text-[#0dccf2]" />
-                Upload JSON
-                <input type="file" accept="application/json" className="hidden" onChange={handleDatasetUpload} />
-              </label>
+      <section className="border-t border-[#0dccf2]/15 bg-[#101f22]/95 h-[400px] shrink-0 overflow-hidden flex flex-col">
+        <Panel
+          title="Experiment Runner"
+          subtitle="Dataset testing with confidence, instability and escalation tracking"
+          className="flex-1 min-h-0 flex flex-col m-4"
+        >
+          <div className="mb-4 flex flex-wrap items-center gap-3">
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-[#0dccf2]/30 bg-black/25 px-3 py-2 text-xs uppercase tracking-[0.12em] text-slate-200 hover:border-[#0dccf2]/60">
+              <Upload className="h-4 w-4 text-[#0dccf2]" />
+              Upload JSON
+              <input type="file" accept="application/json" className="hidden" onChange={handleDatasetUpload} />
+            </label>
 
-              <button
-                type="button"
-                onClick={runExperiment}
-                disabled={experimentRunning || datasetItems.length === 0 || modelStatus !== "ready"}
-                className="inline-flex items-center gap-2 rounded-lg border border-[#0dccf2]/30 bg-[#0dccf2]/90 px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#081014] disabled:opacity-60"
-              >
-                <FlaskConical className="h-4 w-4" />
-                {experimentRunning ? "Running" : "Run Experiment"}
-              </button>
+            <button
+              type="button"
+              onClick={runExperiment}
+              disabled={experimentRunning || datasetItems.length === 0 || modelStatus !== "ready"}
+              className="inline-flex items-center gap-2 rounded-lg border border-[#0dccf2]/30 bg-[#0dccf2]/90 px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#081014] disabled:opacity-60"
+            >
+              <FlaskConical className="h-4 w-4" />
+              {experimentRunning ? "Running" : "Run Experiment"}
+            </button>
 
-              {experimentResults.length > 0 ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        await exportExperimentReportFiles(experimentResults)
-                      } catch (error) {
-                        const message =
-                          error instanceof Error ? error.message : "Failed to generate report files."
-                        setExperimentError(message)
-                      }
-                    }}
-                    className="inline-flex items-center gap-2 rounded-lg border border-[#0dccf2]/30 bg-black/25 px-3 py-2 text-xs uppercase tracking-[0.12em] text-slate-200 hover:border-[#0dccf2]/60"
-                  >
-                    <Download className="h-4 w-4 text-[#0dccf2]" />
-                    Export Report
-                  </button>
+            {experimentResults.length > 0 ? (
+              <>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await exportExperimentReportFiles(experimentResults)
+                    } catch (error) {
+                      const message =
+                        error instanceof Error ? error.message : "Failed to generate report files."
+                      setExperimentError(message)
+                    }
+                  }}
+                  className="inline-flex items-center gap-2 rounded-lg border border-[#0dccf2]/30 bg-black/25 px-3 py-2 text-xs uppercase tracking-[0.12em] text-slate-200 hover:border-[#0dccf2]/60"
+                >
+                  <Download className="h-4 w-4 text-[#0dccf2]" />
+                  Export Report
+                </button>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const blob = new Blob([JSON.stringify(experimentResults, null, 2)], { type: "application/json" })
-                      const url = URL.createObjectURL(blob)
-                      const a = document.createElement("a")
-                      a.href = url
-                      a.download = `experiment_results_${Date.now()}.json`
-                      a.click()
-                      URL.revokeObjectURL(url)
-                    }}
-                    className="inline-flex items-center gap-2 rounded-lg border border-[#0dccf2]/30 bg-black/25 px-3 py-2 text-xs uppercase tracking-[0.12em] text-slate-200 hover:border-[#0dccf2]/60"
-                  >
-                    <Download className="h-4 w-4 text-[#0dccf2]" />
-                    Export JSON
-                  </button>
-                </>
-              ) : null}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const blob = new Blob([JSON.stringify(experimentResults, null, 2)], { type: "application/json" })
+                    const url = URL.createObjectURL(blob)
+                    const a = document.createElement("a")
+                    a.href = url
+                    a.download = `experiment_results_${Date.now()}.json`
+                    a.click()
+                    URL.revokeObjectURL(url)
+                  }}
+                  className="inline-flex items-center gap-2 rounded-lg border border-[#0dccf2]/30 bg-black/25 px-3 py-2 text-xs uppercase tracking-[0.12em] text-slate-200 hover:border-[#0dccf2]/60"
+                >
+                  <Download className="h-4 w-4 text-[#0dccf2]" />
+                  Export JSON
+                </button>
+              </>
+            ) : null}
 
-              <div className="text-xs text-slate-400">
-                <span className="font-semibold text-slate-200">Dataset:</span> {datasetName}
-                {datasetItems.length > 0 ? ` (${datasetItems.length} prompts)` : ""}
-                {datasetItems.length > 0
-                  ? ` | Runs: ${datasetItems.length * TEMPERATURE_SWEEP.length} (${TEMPERATURE_SWEEP.join(", ")})`
-                  : ""}
-              </div>
+            <div className="text-xs text-slate-400">
+              <span className="font-semibold text-slate-200">Dataset:</span> {datasetName}
+              {datasetItems.length > 0 ? ` (${datasetItems.length} prompts)` : ""}
+              {datasetItems.length > 0
+                ? ` | Runs: ${datasetItems.length * TEMPERATURE_SWEEP.length} (${TEMPERATURE_SWEEP.join(", ")})`
+                : ""}
             </div>
+          </div>
 
-            {experimentRunning ? (
+          {
+            experimentRunning ? (
               <div className="mb-3 rounded-lg border border-[#0dccf2]/20 bg-black/25 p-3 text-xs text-slate-300">
                 Running {experimentProgress.done}/{experimentProgress.total}
               </div>
-            ) : null}
+            ) : null
+          }
 
-            {experimentError ? (
+          {
+            experimentError ? (
               <div className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-200">
                 {experimentError}
               </div>
-            ) : null}
+            ) : null
+          }
 
-            {experimentSummary ? (
+          {
+            experimentSummary ? (
               <>
                 <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-4 xl:grid-cols-10">
-                  <MetricCard label="Prompts" value={experimentSummary.total.toString()} />
-                  <MetricCard label="Mean Confidence" value={experimentSummary.meanConfidence.toFixed(3)} />
-                  <MetricCard label="Avg Instability" value={experimentSummary.meanInstability.toFixed(3)} />
-                  <MetricCard label="Mean Entropy" value={experimentSummary.meanEntropy.toFixed(3)} />
-                  <MetricCard label="Mean Uncertainty" value={experimentSummary.meanUncertainty.toFixed(3)} />
-                  <MetricCard label="Mean Difficulty" value={experimentSummary.meanDifficulty.toFixed(3)} />
+                  <MetricCard label="Prompts" value={experimentSummary?.total.toString() || "0"} />
+                  <MetricCard label="Mean Confidence" value={experimentSummary?.meanConfidence.toFixed(3) || "0.000"} />
+                  <MetricCard label="Avg Instability" value={experimentSummary?.meanInstability.toFixed(3) || "0.000"} />
+                  <MetricCard label="Mean Entropy" value={experimentSummary?.meanEntropy.toFixed(3) || "0.000"} />
+                  <MetricCard label="Mean Uncertainty" value={experimentSummary?.meanUncertainty.toFixed(3) || "0.000"} />
+                  <MetricCard label="Mean Difficulty" value={experimentSummary?.meanDifficulty.toFixed(3) || "0.000"} />
                   <MetricCard
                     label="Temp Sensitivity"
-                    value={experimentSummary.meanTemperatureSensitivity.toFixed(3)}
-                    tone={sensitivityTone(experimentSummary.meanTemperatureSensitivity)}
+                    value={experimentSummary?.meanTemperatureSensitivity.toFixed(3) || "0.000"}
+                    tone={sensitivityTone(experimentSummary?.meanTemperatureSensitivity || 0)}
                   />
-                  <MetricCard label="Escalation Rate" value={`${(experimentSummary.escalationRate * 100).toFixed(1)}%`} />
-                  <MetricCard label="Avg Latency" value={`${experimentSummary.avgLatency.toFixed(1)} ms`} />
-                  <MetricCard label="Avg Tokens Out" value={experimentSummary.avgOutputTokens.toFixed(1)} />
+                  <MetricCard label="Escalation Rate" value={`${((experimentSummary?.escalationRate || 0) * 100).toFixed(1)}%`} />
+                  <MetricCard label="Avg Latency" value={`${(experimentSummary?.avgLatency || 0).toFixed(1)} ms`} />
+                  <MetricCard label="Avg Tokens Out" value={(experimentSummary?.avgOutputTokens || 0).toFixed(1)} />
                 </div>
 
                 <div className="mb-4 rounded-lg border border-[#0dccf2]/15 bg-black/25 p-3">
@@ -2286,93 +2206,93 @@ export default function Home() {
                   </div>
                 </div>
               </>
-            ) : null}
+            ) : null
+          }
 
-            <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-[#0dccf2]/15 bg-black/20">
-              {experimentResults.length === 0 ? (
-                <div className="flex h-full min-h-[120px] items-center justify-center p-4 text-sm text-slate-500">
-                  Upload a JSON dataset and run experiment to populate results.
-                </div>
-              ) : (
-                <table className="w-full min-w-[1660px] border-collapse text-xs">
-                  <thead className="sticky top-0 bg-[#101f22]">
-                    <tr className="text-left uppercase tracking-[0.12em] text-slate-400">
-                      <th className="border-b border-[#0dccf2]/15 px-3 py-2">Prompt</th>
-                      <th className="border-b border-[#0dccf2]/15 px-3 py-2">Response</th>
-                      <th className="border-b border-[#0dccf2]/15 px-3 py-2">Category</th>
-                      <th className="border-b border-[#0dccf2]/15 px-3 py-2">Temperature</th>
-                      <th className="border-b border-[#0dccf2]/15 px-3 py-2">Confidence</th>
-                      <th className="border-b border-[#0dccf2]/15 px-3 py-2">Instability</th>
-                      <th className="border-b border-[#0dccf2]/15 px-3 py-2">Entropy</th>
-                      <th className="border-b border-[#0dccf2]/15 px-3 py-2">Uncertainty</th>
-                      <th className="border-b border-[#0dccf2]/15 px-3 py-2">Temp Sensitivity</th>
-                      <th className="border-b border-[#0dccf2]/15 px-3 py-2">Difficulty</th>
-                      <th className="border-b border-[#0dccf2]/15 px-3 py-2">Difficulty Label</th>
-                      <th className="border-b border-[#0dccf2]/15 px-3 py-2">Escalate</th>
-                      <th className="border-b border-[#0dccf2]/15 px-3 py-2">Latency (ms)</th>
-                      <th className="border-b border-[#0dccf2]/15 px-3 py-2">Tokens In</th>
-                      <th className="border-b border-[#0dccf2]/15 px-3 py-2">Samples Used</th>
-                      <th className="border-b border-[#0dccf2]/15 px-3 py-2">Tokens Out</th>
+          <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-[#0dccf2]/15 bg-black/20">
+            {experimentResults.length === 0 ? (
+              <div className="flex h-full min-h-[120px] items-center justify-center p-4 text-sm text-slate-500">
+                Upload a JSON dataset and run experiment to populate results.
+              </div>
+            ) : (
+              <table className="w-full min-w-[1660px] border-collapse text-xs">
+                <thead className="sticky top-0 bg-[#101f22]">
+                  <tr className="text-left uppercase tracking-[0.12em] text-slate-400">
+                    <th className="border-b border-[#0dccf2]/15 px-3 py-2">Prompt</th>
+                    <th className="border-b border-[#0dccf2]/15 px-3 py-2">Response</th>
+                    <th className="border-b border-[#0dccf2]/15 px-3 py-2">Category</th>
+                    <th className="border-b border-[#0dccf2]/15 px-3 py-2">Temperature</th>
+                    <th className="border-b border-[#0dccf2]/15 px-3 py-2">Confidence</th>
+                    <th className="border-b border-[#0dccf2]/15 px-3 py-2">Instability</th>
+                    <th className="border-b border-[#0dccf2]/15 px-3 py-2">Entropy</th>
+                    <th className="border-b border-[#0dccf2]/15 px-3 py-2">Uncertainty</th>
+                    <th className="border-b border-[#0dccf2]/15 px-3 py-2">Temp Sensitivity</th>
+                    <th className="border-b border-[#0dccf2]/15 px-3 py-2">Difficulty</th>
+                    <th className="border-b border-[#0dccf2]/15 px-3 py-2">Difficulty Label</th>
+                    <th className="border-b border-[#0dccf2]/15 px-3 py-2">Escalate</th>
+                    <th className="border-b border-[#0dccf2]/15 px-3 py-2">Latency (ms)</th>
+                    <th className="border-b border-[#0dccf2]/15 px-3 py-2">Tokens In</th>
+                    <th className="border-b border-[#0dccf2]/15 px-3 py-2">Samples Used</th>
+                    <th className="border-b border-[#0dccf2]/15 px-3 py-2">Tokens Out</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {experimentResults.map((row, index) => (
+                    <tr key={`${row.prompt}-${index}`} className="border-b border-[#0dccf2]/10 text-slate-200">
+                      <td className="max-w-[340px] px-3 py-2">
+                        <div className="line-clamp-2">{row.prompt}</div>
+                      </td>
+                      <td className="max-w-[340px] px-3 py-2">
+                        <div className="line-clamp-2">{row.response_text || "-"}</div>
+                      </td>
+                      <td className="px-3 py-2">{row.category}</td>
+                      <td className="px-3 py-2 font-mono">{row.temperature.toFixed(1)}</td>
+                      <td className="px-3 py-2 font-mono">{row.confidence.toFixed(3)}</td>
+                      <td className="px-3 py-2 font-mono">{row.instability.toFixed(3)}</td>
+                      <td className="px-3 py-2 font-mono">{row.entropy.toFixed(3)}</td>
+                      <td className="px-3 py-2 font-mono">{row.uncertainty.toFixed(3)}</td>
+                      <td className={`px-3 py-2 font-mono ${sensitivityTone(row.temperature_sensitivity)}`}>
+                        {row.temperature_sensitivity.toFixed(3)}
+                      </td>
+                      <td className={`px-3 py-2 font-mono ${difficultyTone(row.difficulty_label)}`}>
+                        {row.difficulty.toFixed(3)}
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className={`inline-flex rounded border border-current/30 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] ${difficultyTone(row.difficulty_label)}`}>
+                          {row.difficulty_label}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 font-mono">
+                        {row.escalate ? (
+                          <span className="inline-flex items-center gap-1 text-red-400">
+                            <AlertTriangle className="h-3 w-3" />
+                            true
+                          </span>
+                        ) : (
+                          <span className="text-emerald-400">false</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 font-mono">{row.latency_ms}</td>
+                      <td className="px-3 py-2 font-mono">{row.input_tokens}</td>
+                      <td className="px-3 py-2 font-mono">
+                        <span className={`${row.samples_used >= config.monte_carlo_samples ? "text-red-400 font-bold" : "text-emerald-400"}`}>
+                          {row.samples_used} / {config.monte_carlo_samples}
+                        </span>
+                        {row.samples_used >= config.monte_carlo_samples && (
+                          <span className="ml-2 inline-flex rounded bg-red-500/20 px-1 py-0.5 text-[9px] uppercase tracking-wider text-red-500">
+                            High Complexity
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 font-mono">{row.output_tokens}</td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {experimentResults.map((row, index) => (
-                      <tr key={`${row.prompt}-${index}`} className="border-b border-[#0dccf2]/10 text-slate-200">
-                        <td className="max-w-[340px] px-3 py-2">
-                          <div className="line-clamp-2">{row.prompt}</div>
-                        </td>
-                        <td className="max-w-[340px] px-3 py-2">
-                          <div className="line-clamp-2">{row.response_text || "-"}</div>
-                        </td>
-                        <td className="px-3 py-2">{row.category}</td>
-                        <td className="px-3 py-2 font-mono">{row.temperature.toFixed(1)}</td>
-                        <td className="px-3 py-2 font-mono">{row.confidence.toFixed(3)}</td>
-                        <td className="px-3 py-2 font-mono">{row.instability.toFixed(3)}</td>
-                        <td className="px-3 py-2 font-mono">{row.entropy.toFixed(3)}</td>
-                        <td className="px-3 py-2 font-mono">{row.uncertainty.toFixed(3)}</td>
-                        <td className={`px-3 py-2 font-mono ${sensitivityTone(row.temperature_sensitivity)}`}>
-                          {row.temperature_sensitivity.toFixed(3)}
-                        </td>
-                        <td className={`px-3 py-2 font-mono ${difficultyTone(row.difficulty_label)}`}>
-                          {row.difficulty.toFixed(3)}
-                        </td>
-                        <td className="px-3 py-2">
-                          <span className={`inline-flex rounded border border-current/30 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] ${difficultyTone(row.difficulty_label)}`}>
-                            {row.difficulty_label}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 font-mono">
-                          {row.escalate ? (
-                            <span className="inline-flex items-center gap-1 text-red-400">
-                              <AlertTriangle className="h-3 w-3" />
-                              true
-                            </span>
-                          ) : (
-                            <span className="text-emerald-400">false</span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 font-mono">{row.latency_ms}</td>
-                        <td className="px-3 py-2 font-mono">{row.input_tokens}</td>
-                        <td className="px-3 py-2 font-mono">
-                          <span className={`${row.samples_used >= config.monte_carlo_samples ? "text-red-400 font-bold" : "text-emerald-400"}`}>
-                            {row.samples_used} / {config.monte_carlo_samples}
-                          </span>
-                          {row.samples_used >= config.monte_carlo_samples && (
-                            <span className="ml-2 inline-flex rounded bg-red-500/20 px-1 py-0.5 text-[9px] uppercase tracking-wider text-red-500">
-                              High Complexity
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 font-mono">{row.output_tokens}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </Panel>
-        </div>
-      </main>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </Panel>
+      </section>
 
       <footer className="border-t border-[#0dccf2]/15 bg-[#101f22]/90 px-4 py-2 text-xs text-slate-400 md:px-6">
         <div className="flex flex-wrap items-center gap-4 font-mono">

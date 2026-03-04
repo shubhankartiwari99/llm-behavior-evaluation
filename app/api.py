@@ -179,7 +179,7 @@ def _validate_generate_request(payload: dict[str, Any]) -> dict[str, Any]:
 
     max_new_tokens = payload.get("max_new_tokens", 128)
     if max_new_tokens is None:
-        max_new_tokens = 128
+        max_new_tokens = 80
     if not isinstance(max_new_tokens, int) or isinstance(max_new_tokens, bool):
         raise ValueError("Invalid max_new_tokens.")
     if max_new_tokens <= 0 or max_new_tokens > 8192:
