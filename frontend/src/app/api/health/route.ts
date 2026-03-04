@@ -1,11 +1,17 @@
 import { NextResponse } from "next/server"
 
-import { buildInferenceUrl } from "@/lib/inference-endpoint"
+import { getInferenceEndpoint } from "@/lib/inference-endpoint"
+
+function getHealthEndpoint() {
+  const endpoint = getInferenceEndpoint()
+  return endpoint.replace(/\/generate\/?$/, "/health")
+}
 
 export async function GET() {
   try {
-    const res = await fetch(buildInferenceUrl("/health"), {
+    const res = await fetch(getHealthEndpoint(), {
       method: "GET",
+      headers: { "ngrok-skip-browser-warning": "true" },
       signal: AbortSignal.timeout(3000),
     })
 
