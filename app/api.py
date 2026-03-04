@@ -119,13 +119,13 @@ def _validate_generate_request(payload: dict[str, Any]) -> dict[str, Any]:
     if mode not in _ALLOWED_MODES:
         raise ValueError("Unsupported mode.")
 
-    temperature = payload.get("temperature", 0.7)
-    if temperature is None:
-        temperature = 0.7
-    if not isinstance(temperature, (int, float)) or isinstance(temperature, bool):
+    t_val = payload.get("temperature", 0.7)
+    if t_val is None:
+        t_val = 0.7
+    if not isinstance(t_val, (int, float)) or isinstance(t_val, bool):
         raise ValueError("Invalid temperature.")
-    temperature = float(temperature)
-    if temperature < 0.0 or temperature > 2.0:
+    t_val = float(t_val)
+    if t_val < 0.0 or t_val > 2.0:
         raise ValueError("Invalid temperature.")
 
     top_p = payload.get("top_p", 0.9)
@@ -145,20 +145,20 @@ def _validate_generate_request(payload: dict[str, Any]) -> dict[str, Any]:
     if max_new_tokens <= 0 or max_new_tokens > 8192:
         raise ValueError("Invalid max_new_tokens.")
 
-    do_sample = payload.get("do_sample", True)
-    if do_sample is None:
-        do_sample = True
-    if not isinstance(do_sample, bool):
+    ds_val = payload.get("do_sample", True)
+    if ds_val is None:
+        ds_val = True
+    if not isinstance(ds_val, bool):
         raise ValueError("Invalid do_sample.")
 
     return {
         "prompt": prompt,
         "emotional_lang": lang,
         "mode": mode,
-        "temperature": temperature,
+        "temperature": t_val,
         "top_p": top_p,
         "max_new_tokens": max_new_tokens,
-        "do_sample": do_sample,
+        "do_sample": ds_val,
     }
 
 
@@ -275,17 +275,20 @@ async def generate_text(request: Request):
             max_new_tokens=validated["max_new_tokens"],
         )
         
-        # 5x Entropy runs (Monte Carlo sampling for robust uncertainty estimation)
+        # 5x Entropy runs (Monte Carlo execution for robust uncertainty estimation)
         from concurrent.futures import ThreadPoolExecutor
         
         def run_entropy():
+            kwargs = {
+                "temperature": validated["temperature"],
+                "top_p": validated["top_p"],
+                "do_sample": validated["do_sample"],
+                "max_new_tokens": validated["max_new_tokens"],
+            }
             return runtime_engine.generate(
                 structured_prompt,
                 return_meta=True,
-                temperature=validated["temperature"],
-                top_p=validated["top_p"],
-                do_sample=validated["do_sample"],
-                max_new_tokens=validated["max_new_tokens"],
+                **kwargs
             )
 
         with ThreadPoolExecutor(max_workers=5) as executor:

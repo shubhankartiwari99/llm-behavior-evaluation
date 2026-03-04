@@ -5,9 +5,11 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronRight,
+  Download,
   FlaskConical,
   Play,
   Server,
+  Trash2,
   Upload,
 } from "lucide-react"
 
@@ -261,6 +263,7 @@ export default function Home() {
   const [experimentProgress, setExperimentProgress] = useState({ done: 0, total: 0 })
   const [experimentError, setExperimentError] = useState<string | null>(null)
   const [experimentResults, setExperimentResults] = useState<ExperimentResult[]>([])
+  const [clockText, setClockText] = useState("--:--:--")
 
   const monteCarlo = useMemo(() => {
     const mc = trace?.monte_carlo_analysis
@@ -294,6 +297,19 @@ export default function Home() {
 
     checkHealth()
     const id = setInterval(checkHealth, 10000)
+    return () => clearInterval(id)
+  }, [])
+
+  useEffect(() => {
+    const tick = () => {
+      setClockText(
+        new Date().toLocaleTimeString("en-GB", {
+          hour12: false,
+        }),
+      )
+    }
+    tick()
+    const id = setInterval(tick, 1000)
     return () => clearInterval(id)
   }, [])
 
@@ -468,15 +484,14 @@ export default function Home() {
           <div className="flex items-center gap-4 text-xs font-mono">
             <div className="flex items-center gap-2">
               <span
-                className={`h-2 w-2 rounded-full ${
-                  systemStatus === "Connected" ? "bg-emerald-500" : "bg-red-500"
-                }`}
+                className={`h-2 w-2 rounded-full ${systemStatus === "Connected" ? "bg-emerald-500" : "bg-red-500"
+                  }`}
               />
               <span className={systemStatus === "Connected" ? "text-emerald-400" : "text-red-400"}>
                 {systemStatus}
               </span>
             </div>
-            <div className="text-slate-500">{new Date().toLocaleTimeString()}</div>
+            <div className="text-slate-500">{clockText}</div>
           </div>
         </div>
       </header>
@@ -511,7 +526,7 @@ export default function Home() {
 
       <main className="min-h-0 flex-1 overflow-hidden p-4 md:p-6">
         <div className="grid min-h-0 gap-4 lg:h-full lg:grid-rows-[minmax(0,1fr)_minmax(240px,36%)]">
-          <div className="grid min-h-0 grid-cols-1 gap-4 xl:grid-cols-[minmax(280px,24%)_minmax(0,46%)_minmax(280px,30%)]">
+          <div className="grid min-h-0 grid-cols-1 gap-4 xl:grid-cols-[minmax(280px,30%)_minmax(0,45%)_minmax(240px,25%)]">
             <Panel title="Prompt Lab" subtitle="Prompt + controls + run" className="min-h-0 flex flex-col">
               <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
                 <div className="space-y-2">
@@ -580,15 +595,32 @@ export default function Home() {
                   </div>
                 ))}
 
-                <button
-                  type="button"
-                  onClick={runPrompt}
-                  disabled={loading}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-[#0dccf2]/30 bg-[#0dccf2]/90 px-4 py-2 text-sm font-semibold text-[#081014] transition hover:bg-[#33d5f3] disabled:opacity-60"
-                >
-                  <Play className="h-4 w-4" />
-                  {loading ? "Running..." : "Run Prompt"}
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={runPrompt}
+                    disabled={loading}
+                    className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-[#0dccf2]/30 bg-[#0dccf2]/90 px-4 py-2 text-sm font-semibold text-[#081014] transition hover:bg-[#33d5f3] disabled:opacity-60"
+                  >
+                    <Play className="h-4 w-4" />
+                    {loading ? "Running..." : "Run Prompt"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPrompt("")
+                      setResult(null)
+                      setCoreComparison(null)
+                      setTrace(null)
+                      setReviewPacket(null)
+                      setErrorMessage(null)
+                    }}
+                    className="inline-flex items-center justify-center gap-1 rounded-lg border border-[#0dccf2]/20 bg-black/25 px-3 py-2 text-xs uppercase tracking-[0.12em] text-slate-300 transition hover:border-red-500/40 hover:text-red-300"
+                    title="Clear prompt and results"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             </Panel>
 
@@ -786,6 +818,25 @@ export default function Home() {
                 <FlaskConical className="h-4 w-4" />
                 {experimentRunning ? "Running" : "Run Experiment"}
               </button>
+
+              {experimentResults.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const blob = new Blob([JSON.stringify(experimentResults, null, 2)], { type: "application/json" })
+                    const url = URL.createObjectURL(blob)
+                    const a = document.createElement("a")
+                    a.href = url
+                    a.download = `experiment_results_${Date.now()}.json`
+                    a.click()
+                    URL.revokeObjectURL(url)
+                  }}
+                  className="inline-flex items-center gap-2 rounded-lg border border-[#0dccf2]/30 bg-black/25 px-3 py-2 text-xs uppercase tracking-[0.12em] text-slate-200 hover:border-[#0dccf2]/60"
+                >
+                  <Download className="h-4 w-4 text-[#0dccf2]" />
+                  Export
+                </button>
+              ) : null}
 
               <div className="text-xs text-slate-400">
                 <span className="font-semibold text-slate-200">Dataset:</span> {datasetName}
