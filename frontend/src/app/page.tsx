@@ -1925,9 +1925,9 @@ export default function Home() {
           <Panel title="MC Diagnostics" subtitle="Stochastic divergence" className="bg-slate-900/50 border-slate-800 h-[400px] flex flex-col">
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
-                <MetricCard label="Dispersion" value={result?.semantic_dispersion?.toFixed(3) || "0.000"} interpretation={result ? (result.semantic_dispersion > 0.1 ? "⚠ High" : "Stable") : undefined} tone={result?.semantic_dispersion && result.semantic_dispersion > 0.1 ? "text-amber-400" : "text-[#0dccf2]"} />
+                <MetricCard label="Dispersion" value={result?.semantic_dispersion?.toFixed(3) || "0.000"} interpretation={result?.semantic_dispersion !== undefined ? (result.semantic_dispersion > 0.1 ? "⚠ High" : "Stable") : undefined} tone={result?.semantic_dispersion && result.semantic_dispersion > 0.1 ? "text-amber-400" : "text-[#0dccf2]"} />
                 <MetricCard label="Entropy" value={result?.entropy?.toFixed(3) || "0.000"} interpretation={result?.entropy !== undefined ? getEntropyInterpretation(result.entropy) : undefined} tone={result?.entropy && result.entropy > 0.5 ? "text-amber-400" : "text-[#0dccf2]"} />
-                <MetricCard label="Clusters" value={result?.cluster_count?.toString() || "0"} interpretation={result ? (result.cluster_count && result.cluster_count > 1 ? "⚠ Divergent" : "Stable") : undefined} tone={result?.cluster_count && result.cluster_count > 1 ? "text-amber-400" : "text-[#0dccf2]"} />
+                <MetricCard label="Clusters" value={result?.cluster_count?.toString() || "0"} interpretation={result?.cluster_count !== undefined ? (result.cluster_count > 1 ? "⚠ Divergent" : "Stable") : undefined} tone={result?.cluster_count && result.cluster_count > 1 ? "text-amber-400" : "text-[#0dccf2]"} />
                 <MetricCard label="Consistency" value={result?.self_consistency ? `${(result.self_consistency * 100).toFixed(0)}%` : "--"} />
               </div>
               <div className="pt-4 border-t border-slate-800 space-y-2">
