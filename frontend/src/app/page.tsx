@@ -61,6 +61,7 @@ type InferenceResult = {
   cluster_entropy?: number
   dominant_cluster_ratio?: number
   self_consistency?: number
+  failures?: string[]
 }
 
 type TraceLog = {
@@ -131,6 +132,7 @@ type ExperimentResult = {
   dominant_cluster_ratio?: number
   self_consistency?: number
   trace?: TraceLog
+  failures?: string[]
 }
 
 type ModelStatus = "ready" | "loading" | "offline"
@@ -473,6 +475,12 @@ function parseInferenceResponse(payload: unknown): InferenceApiResponse {
     !isRecord(payload.review_packet)
   ) {
     throw new Error("Invalid review_packet in inference response.")
+  }
+
+  if ("failures" in payload && payload.failures !== undefined) {
+    if (!Array.isArray(payload.failures)) {
+      throw new Error("Invalid failures in inference response.")
+    }
   }
 
   return payload as InferenceApiResponse
@@ -1154,6 +1162,7 @@ function RibbonMetric({
 }
 
 function LeaderboardPanel({ data }: { data: LeaderboardEntry[] }) {
+  // ... existing LeaderboardPanel ...
   return (
     <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4 overflow-hidden flex flex-col h-full min-h-[200px]">
       <div className="flex items-center gap-2 mb-4 border-b border-slate-800 pb-2">
@@ -1191,7 +1200,119 @@ function LeaderboardPanel({ data }: { data: LeaderboardEntry[] }) {
   )
 }
 
+function ReliabilityHeatmap({ data, loading, onRun }: { data: any[], loading: boolean, onRun: () => void }) {
+  if (data.length === 0 && !loading) {
+    return (
+      <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 flex flex-col items-center justify-center text-center space-y-4 h-full">
+        <BarChart3 className="h-10 w-10 text-slate-700" />
+        <div>
+          <h3 className="text-sm font-bold text-slate-300">Stability Parameter Grid</h3>
+          <p className="text-xs text-slate-500 mt-1 max-w-[300px]">Analyze model reliability across 12 combinations of Temperature and Top-P.</p>
+        </div>
+        <button
+          onClick={onRun}
+          className="px-4 py-2 bg-[#0dccf2]/10 border border-[#0dccf2]/30 rounded-lg text-xs font-bold text-[#0dccf2] hover:bg-[#0dccf2]/20 transition-colors uppercase tracking-widest"
+        >
+          Initialize Matrix Run
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4 flex flex-col h-full">
+      <div className="flex items-center justify-between mb-4 border-b border-slate-800 pb-2">
+        <div className="flex items-center gap-2">
+          <BarChart3 className="h-4 w-4 text-[#0dccf2]" />
+          <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Reliability Heatmap</h3>
+        </div>
+        <button
+          onClick={onRun}
+          disabled={loading}
+          className="text-[9px] uppercase font-bold text-[#0dccf2] hover:underline disabled:opacity-40"
+        >
+          {loading ? "Sweeping Grid..." : "Re-Run Parameter Sweep"}
+        </button>
+      </div>
+
+      <div className="flex-1 grid grid-cols-3 gap-2 overflow-y-auto no-scrollbar">
+        {data.map((cell, i) => (
+          <div
+            key={i}
+            className={`p-2 rounded-lg border border-white/5 flex flex-col items-center justify-center text-center transition-all hover:scale-[1.02] ${cell.instability < 0.15
+              ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+              : cell.instability < 0.3
+                ? "bg-amber-500/10 border-amber-500/20 text-amber-300"
+                : "bg-red-500/10 border-red-500/20 text-red-400"
+              }`}
+          >
+            <div className="text-[8px] uppercase font-black opacity-60 mb-1">T={cell.temperature.toFixed(1)} P={cell.top_p.toFixed(2)}</div>
+            <div className="text-sm font-black font-mono">{(cell.instability * 100).toFixed(0)}%</div>
+            <div className="text-[8px] uppercase font-bold mt-1">
+              {cell.instability < 0.15 ? "Stable" : cell.instability < 0.3 ? "Moderate" : "divergent"}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function FailureAnalysis({ failures }: { failures?: string[] }) {
+  if (!failures || failures.length === 0) {
+    return (
+      <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 flex flex-col items-center justify-center text-center space-y-4 h-full">
+        <div className="h-10 w-10 rounded-full bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
+          <ClipboardCheck className="h-5 w-5 text-emerald-500" />
+        </div>
+        <div>
+          <h3 className="text-sm font-bold text-slate-300 uppercase tracking-widest">No Failures Detected</h3>
+          <p className="text-[10px] text-slate-500 mt-2 max-w-[240px] leading-relaxed">System telemetry indicates nominal behavioral stability for current inference block.</p>
+        </div>
+      </div>
+    )
+  }
+
+  const getSeverity = (mode: string) => {
+    if (mode === "dialogue_contamination" || mode === "semantic_divergence") return "CRITICAL"
+    if (mode === "instruction_drift" || mode === "stochastic_instability") return "MODERATE"
+    return "LOW"
+  }
+
+  const getSeverityTone = (sev: string) => {
+    if (sev === "CRITICAL") return "text-red-400 bg-red-400/10 border-red-400/20"
+    if (sev === "MODERATE") return "text-amber-400 bg-amber-400/10 border-amber-400/20"
+    return "text-emerald-400 bg-emerald-400/10 border-emerald-400/20"
+  }
+
+  return (
+    <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4 flex flex-col h-full overflow-hidden">
+      <div className="flex items-center gap-2 mb-4 border-b border-slate-800 pb-2 shrink-0">
+        <AlertTriangle className="h-4 w-4 text-orange-500" />
+        <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Failure Mode Analysis</h3>
+      </div>
+      <div className="flex-1 overflow-y-auto space-y-3 pr-1 no-scrollbar">
+        {failures.map((mode, i) => {
+          const sev = getSeverity(mode)
+          return (
+            <div key={i} className="p-3 bg-slate-950/60 border border-slate-800 rounded-lg flex items-center justify-between group transition-all hover:border-slate-700">
+              <div className="space-y-1">
+                <p className="text-[10px] uppercase font-black tracking-widest text-[#0dccf2]">{mode.replace(/_/g, " ")}</p>
+                <p className="text-[9px] text-slate-500 uppercase font-bold tracking-tight">Pattern match detected in latest telemetry</p>
+              </div>
+              <span className={`text-[8px] font-black px-1.5 py-0.5 rounded border ${getSeverityTone(sev)}`}>
+                {sev}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export default function Home() {
+  const API_BASE = "http://127.0.0.1:8000"
   const [prompt, setPrompt] = useState("")
   const [config, setConfig] = useState<InferenceConfig>({
     mode: "factual",
@@ -1225,6 +1346,8 @@ export default function Home() {
   const [clockText, setClockText] = useState("--:--:--")
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
   const [reportLoading, setReportLoading] = useState(false)
+  const [gridResults, setGridResults] = useState<any[]>([])
+  const [gridLoading, setGridLoading] = useState(false)
 
   const monteCarlo = useMemo(() => {
     const mc = trace?.monte_carlo_analysis
@@ -1347,7 +1470,7 @@ export default function Home() {
   useEffect(() => {
     const checkHealth = async () => {
       try {
-        const response = await fetch("/api/health", { cache: "no-store" })
+        const response = await fetch(`${API_BASE}/api/health`, { cache: "no-store" })
         if (!response.ok) {
           setModelStatus("offline")
           return
@@ -1375,9 +1498,32 @@ export default function Home() {
     return () => clearInterval(id)
   }, [])
 
+  async function runGridEvaluation() {
+    if (!prompt) return
+    setGridLoading(true)
+    try {
+      const res = await fetch(`${API_BASE}/api/evaluate/grid`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt,
+          ...config
+        }),
+      })
+      const data = await res.json()
+      if (data.results) {
+        setGridResults(data.results)
+      }
+    } catch (e) {
+      console.error("Failed to run grid evaluation", e)
+    } finally {
+      setGridLoading(false)
+    }
+  }
+
   async function fetchLeaderboard() {
     try {
-      const res = await fetch("http://localhost:8000/evaluate/leaderboard")
+      const res = await fetch(`${API_BASE}/api/evaluate/leaderboard`)
       const data = await res.json()
       setLeaderboard(data)
     } catch (e) {
@@ -1389,7 +1535,7 @@ export default function Home() {
     if (!experimentSummary) return
     setReportLoading(true)
     try {
-      const res = await fetch("http://localhost:8000/evaluate/report", {
+      const res = await fetch(`${API_BASE}/api/evaluate/report`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ summary: experimentSummary }),
@@ -1435,7 +1581,7 @@ export default function Home() {
     }
 
     const sendRequest = async (includeMonteCarloSamples: boolean) => {
-      const response = await fetch("/api/generate", {
+      const response = await fetch(`${API_BASE}/api/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
@@ -1513,6 +1659,7 @@ export default function Home() {
         cluster_entropy: typeof data.cluster_entropy === "number" ? data.cluster_entropy : undefined,
         dominant_cluster_ratio: typeof data.dominant_cluster_ratio === "number" ? data.dominant_cluster_ratio : undefined,
         self_consistency: typeof data.self_consistency === "number" ? data.self_consistency : undefined,
+        failures: Array.isArray(data.failures) ? data.failures : undefined,
       })
       setCoreComparison(data.core_comparison ?? null)
       setTrace(data.trace ?? null)
@@ -1596,7 +1743,7 @@ export default function Home() {
     setExperimentProgress({ done: 0, total: flatPrompts.length })
 
     try {
-      const resp = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/evaluate/benchmark`, {
+      const resp = await fetch(`${API_BASE}/api/evaluate/benchmark`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1946,11 +2093,41 @@ export default function Home() {
             </div>
           </Panel>
 
-          <LeaderboardPanel data={leaderboard} />
+          <Panel title="Uncertainty Trigger" subtitle="Anomaly detection" className={`bg-slate-900/50 border-slate-800 h-[400px] flex flex-col ${result?.escalate ? "ring-1 ring-orange-500/40" : ""}`}>
+            {result?.escalate ? (
+              <div className="flex-1 flex flex-col justify-center space-y-6 text-center">
+                <div className="py-4 bg-orange-500/10 border border-orange-500/20 rounded-xl">
+                  <p className="text-[10px] uppercase font-black tracking-[0.4em] text-orange-400 mb-2">Uncertainty State</p>
+                  <p className="text-3xl font-black text-orange-500 drop-shadow-[0_0_10px_rgba(249,115,22,0.4)]">TRIGGERED</p>
+                </div>
+                <div className="grid grid-cols-1 gap-2 text-left">
+                  <div className="flex justify-between p-2 bg-slate-900/60 rounded border border-slate-800">
+                    <span className="text-[10px] uppercase text-slate-500">Similarity</span>
+                    <span className="text-xs font-mono text-orange-300">{reviewPacket?.embedding_similarity?.toFixed(3) || "n/a"}</span>
+                  </div>
+                  <div className="flex justify-between p-2 bg-slate-900/60 rounded border border-slate-800">
+                    <span className="text-[10px] uppercase text-slate-500">Ambiguity</span>
+                    <span className="text-xs font-mono text-orange-300">{reviewPacket?.ambiguity?.toFixed(3) || "n/a"}</span>
+                  </div>
+                  <div className="flex justify-between p-2 bg-slate-900/60 rounded border border-slate-800">
+                    <span className="text-[10px] uppercase text-slate-500">Entropy Var</span>
+                    <span className="text-xs font-mono text-orange-300">{isRecord(monteCarlo) && (monteCarlo as any).entropy_variance?.toFixed(3) || "n/a"}</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="h-full flex items-center justify-center text-slate-700 font-mono text-[10px] uppercase tracking-widest text-center px-4">
+                No uncertainty signals detected in current inference block
+              </div>
+            )}
+          </Panel>
+
+          <FailureAnalysis failures={result?.failures} />
         </div>
 
         {/* Layer 4: Experiment Runner */}
         <Panel title="Experiment Runner" subtitle="Batch evaluation engine" className="bg-slate-950 border-slate-800 h-[420px] shrink-0 flex flex-col mb-8">
+          {/* ... Experiment Runner content ... (restored correctly below) */}
           <div className="flex-1 min-h-0 flex flex-col">
             <div className="flex items-center gap-4 mb-6 border-b border-slate-800 pb-4">
               <label className="flex items-center gap-2 cursor-pointer bg-slate-900 border border-slate-800 px-4 py-2 rounded-lg text-xs hover:border-[#0dccf2]/50 transition-colors uppercase tracking-widest">
@@ -2119,6 +2296,14 @@ export default function Home() {
             </div>
           </div>
         </Panel>
+
+        {/* Layer 5: Parameter Sensitivity Grid */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 pb-8 px-1">
+          <div className="lg:col-span-2">
+            <ReliabilityHeatmap data={gridResults} loading={gridLoading} onRun={runGridEvaluation} />
+          </div>
+          <LeaderboardPanel data={leaderboard} />
+        </div>
       </main>
 
       <footer className="border-t border-[#0dccf2]/15 bg-[#101f22]/90 px-4 py-2 text-xs text-slate-400 md:px-6">
@@ -2136,6 +2321,6 @@ export default function Home() {
           )}
         </div>
       </footer>
-    </div>
+    </div >
   )
 }

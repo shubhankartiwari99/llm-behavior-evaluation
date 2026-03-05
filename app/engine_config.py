@@ -1,1 +1,1 @@
-MODEL_BACKEND = "hf"
+MODEL_BACKEND = "gguf"

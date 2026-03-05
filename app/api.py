@@ -9,7 +9,7 @@ import datetime
 import threading
 from typing import Any
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, APIRouter
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -25,6 +25,8 @@ from app.tone.tone_calibration import calibrate_tone
 from app.intelligence.dual_plane import evaluate_dual_plane
 from app.eval.leaderboard import update_leaderboard, get_leaderboard
 from app.eval.report_generator import generate_research_report
+from app.eval.reliability_grid import run_reliability_grid
+from app.eval.failure_detector import detect_failures
 
 app = FastAPI(
     title="Indian Desi Multilingual LLM",
@@ -412,6 +414,13 @@ def run_inference_pipeline(runtime_engine: InferenceEngine, validated: dict[str,
         "dominant_cluster_ratio": analysis["dominant_cluster_ratio"],
         "self_consistency": analysis["self_consistency"],
         "samples": ent_outputs,
+        "failures": detect_failures(det_response_text, {
+            "instability": analysis["instability"],
+            "entropy": analysis["entropy"],
+            "cluster_count": analysis["cluster_count"],
+            "semantic_dispersion": analysis["semantic_dispersion"],
+            "output_tokens": det_token_count
+        }),
         "core_comparison": {
             "core_a_output": det_response_text,
             "core_b_output": core_b_output,
@@ -626,10 +635,63 @@ async def create_report(request: Request):
         return JSONResponse(status_code=500, content={"error": "Failed to generate report."})
 
 
+@app.post("/evaluate/grid")
+async def evaluate_grid(request: Request):
+    try:
+        payload = await request.json()
+        prompt = payload.get("prompt")
+        if not prompt:
+            return JSONResponse(status_code=400, content={"error": "Missing prompt."})
+            
+        validated_params = validate_inference_params(payload)
+        runtime_engine = get_engine(ENGINE_NAME)
+        
+        # Run grid evaluation
+        results = await run_reliability_grid(prompt, runtime_engine, validated_params)
+        
+        return JSONResponse(status_code=200, content={"results": results})
+        
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc), "code": "INVALID_INPUT"})
+    except Exception as exc:
+        logging.exception("Grid evaluation failed: %s", exc)
+        return JSONResponse(status_code=500, content={"error": "Grid evaluation failed.", "code": "GRID_ERROR"})
+
+
 @app.get("/version")
+@app.get("/api/version")
 def version():
     return {
         "engine_name": ENGINE_NAME,
         "engine_version": ENGINE_VERSION,
         "release_stage": ENGINE_RELEASE_STAGE,
     }
+
+# API Router for prefix /api
+api_router = APIRouter(prefix="/api")
+
+@api_router.get("/health")
+def api_health():
+    return health_check()
+
+@api_router.post("/generate")
+async def api_generate(request: Request):
+    return await generate_text(request)
+
+@api_router.post("/evaluate/benchmark")
+async def api_benchmark(request: Request):
+    return await evaluate_benchmark(request)
+
+@api_router.get("/evaluate/leaderboard")
+async def api_leaderboard():
+    return await fetch_leaderboard()
+
+@api_router.post("/evaluate/report")
+async def api_report(request: Request):
+    return await create_report(request)
+
+@api_router.post("/evaluate/grid")
+async def api_grid(request: Request):
+    return await evaluate_grid(request)
+
+app.include_router(api_router)
