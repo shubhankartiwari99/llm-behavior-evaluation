@@ -1754,18 +1754,32 @@ export default function Home() {
       const allResults: any[] = []
       let lastSummary: any = null
 
+      const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
       for (let i = 0; i < flatPrompts.length; i += BATCH_SIZE) {
         const batch = flatPrompts.slice(i, i + BATCH_SIZE)
 
-        const resp = await apiFetch("/api/evaluate/benchmark", {
-          method: "POST",
-          body: JSON.stringify({
-            prompts: batch,
-            ...config
-          })
-        })
+        let resp: Response | null = null
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            resp = await apiFetch("/api/evaluate/benchmark", {
+              method: "POST",
+              body: JSON.stringify({
+                prompts: batch,
+                ...config
+              })
+            })
+            if (resp.ok) break
+          } catch (e) {
+            console.warn("Batch attempt " + (attempt + 1) + " failed, retrying...")
+          }
+          await sleep(5000)
+        }
 
-        if (!resp.ok) throw new Error(`Batch ${i} failed: ${resp.statusText}`)
+        if (!resp || !resp.ok) {
+          console.error("Batch " + i + " failed after 3 attempts, skipping")
+          continue
+        }
 
         const { summary, results } = await resp.json()
         allResults.push(...results)
@@ -1773,6 +1787,8 @@ export default function Home() {
 
         // Update progress live
         setExperimentProgress({ done: allResults.length, total: flatPrompts.length })
+
+        await sleep(3000)
       }
 
       const mappedResults = allResults.map((data: any, idx: number) => {
