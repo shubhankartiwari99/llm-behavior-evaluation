@@ -1337,7 +1337,19 @@ export default function Home() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const [result, setResult] = useState<InferenceResult | null>(null)
-  const [coreComparison, setCoreComparison] = useState<CoreComparison | null>(null)
+  const [coreComparison, setCoreComparison] = useState<{
+    similarity: number | null;
+    token_delta: number | null;
+    length_delta: number | null;
+    core_a: string | null;
+    core_b: string | null;
+  }>({
+    similarity: null,
+    token_delta: null,
+    length_delta: null,
+    core_a: null,
+    core_b: null
+  })
   const [trace, setTrace] = useState<Record<string, unknown> | null>(null)
   const [reviewPacket, setReviewPacket] = useState<ReviewPacket | null>(null)
   const [traceExpanded, setTraceExpanded] = useState(false)
@@ -1668,7 +1680,19 @@ export default function Home() {
         self_consistency: typeof data.self_consistency === "number" ? data.self_consistency : undefined,
         failures: Array.isArray(data.failures) ? data.failures : undefined,
       })
-      setCoreComparison(data.core_comparison ?? null)
+      setCoreComparison(data.core_comparison ? {
+        similarity: data.core_comparison.embedding_similarity,
+        token_delta: data.core_comparison.token_delta,
+        length_delta: data.core_comparison.length_delta,
+        core_a: data.core_comparison.core_a_output,
+        core_b: data.core_comparison.core_b_output,
+      } : {
+        similarity: null,
+        token_delta: null,
+        length_delta: null,
+        core_a: null,
+        core_b: null
+      })
       setTrace(data.trace ?? null)
       setReviewPacket(data.review_packet ?? null)
 
@@ -2051,15 +2075,21 @@ export default function Home() {
               <div className="grid grid-cols-3 gap-2 shrink-0">
                 <div className="bg-slate-900 border border-slate-800 rounded-lg p-2 text-center">
                   <p className="text-[9px] uppercase tracking-tighter text-slate-500 mb-1">Similarity</p>
-                  <p className="text-[11px] font-mono text-emerald-400">0.992</p>
+                  <p className="text-[11px] font-mono text-emerald-400">
+                    {coreComparison.similarity !== null ? coreComparison.similarity.toFixed(3) : "--"}
+                  </p>
                 </div>
                 <div className="bg-slate-900 border border-slate-800 rounded-lg p-2 text-center">
                   <p className="text-[9px] uppercase tracking-tighter text-slate-500 mb-1">Token Delta</p>
-                  <p className="text-[11px] font-mono text-amber-400">+4</p>
+                  <p className="text-[11px] font-mono text-amber-400">
+                    {coreComparison.token_delta !== null ? (coreComparison.token_delta > 0 ? `+${coreComparison.token_delta}` : coreComparison.token_delta) : "--"}
+                  </p>
                 </div>
                 <div className="bg-slate-900 border border-slate-800 rounded-lg p-2 text-center">
                   <p className="text-[9px] uppercase tracking-tighter text-slate-500 mb-1">Length Delta</p>
-                  <p className="text-[11px] font-mono text-slate-300">12%</p>
+                  <p className="text-[11px] font-mono text-slate-300">
+                    {coreComparison.length_delta !== null ? `${coreComparison.length_delta}%` : "--"}
+                  </p>
                 </div>
               </div>
 
@@ -2067,13 +2097,13 @@ export default function Home() {
                 <div className="space-y-2">
                   <h3 className="text-[10px] font-bold uppercase tracking-widest text-[#0dccf2]">Core A <span className="text-slate-500 font-normal">(Deterministic)</span></h3>
                   <div className="bg-slate-900/60 border border-slate-800 rounded-lg p-3 text-xs leading-relaxed text-slate-300 min-h-[120px]">
-                    {coreComparison?.core_a_output || "Awaiting core evaluation..."}
+                    {coreComparison.core_a !== null ? coreComparison.core_a : "Awaiting core evaluation..."}
                   </div>
                 </div>
                 <div className="space-y-2">
                   <h3 className="text-[10px] font-bold uppercase tracking-widest text-amber-400">Core B <span className="text-slate-500 font-normal">(Entropy Driven)</span></h3>
                   <div className="bg-slate-900/60 border border-slate-800 rounded-lg p-3 text-xs leading-relaxed text-slate-300 min-h-[120px]">
-                    {coreComparison?.core_b_output || "Awaiting side-channel variance..."}
+                    {coreComparison.core_b !== null ? coreComparison.core_b : "Awaiting side-channel variance..."}
                   </div>
                 </div>
               </div>
@@ -2250,80 +2280,87 @@ export default function Home() {
                 </div>
               </div>
 
-              {experimentSummary && (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-500">
-                  <div className="lg:col-span-2 space-y-6">
-                    <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4">
-                      <p className="text-[10px] uppercase font-black tracking-widest text-slate-500 mb-4 pl-1">Category Reliability Index</p>
-                      <div className="overflow-x-auto no-scrollbar">
-                        <table className="w-full text-left text-[11px] font-mono">
-                          <thead>
-                            <tr className="border-b border-slate-800 text-slate-500 uppercase">
-                              <th className="pb-2 font-bold px-2">Category</th>
-                              <th className="pb-2 font-bold px-2">Count</th>
-                              <th className="pb-2 font-bold px-2 text-amber-500">Instability</th>
-                              <th className="pb-2 font-bold px-2 text-[#0dccf2]">Confidence</th>
-                              <th className="pb-2 font-bold px-2 text-slate-400">Difficulty</th>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-500">
+                <div className="lg:col-span-2 space-y-6">
+                  <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4">
+                    <p className="text-[10px] uppercase font-black tracking-widest text-slate-500 mb-4 pl-1">Category Reliability Index</p>
+                    <div className="overflow-x-auto no-scrollbar">
+                      <table className="w-full text-left text-[11px] font-mono">
+                        <thead>
+                          <tr className="border-b border-slate-800 text-slate-500 uppercase">
+                            <th className="pb-2 font-bold px-2">Category</th>
+                            <th className="pb-2 font-bold px-2">Count</th>
+                            <th className="pb-2 font-bold px-2 text-amber-500">Instability</th>
+                            <th className="pb-2 font-bold px-2 text-[#0dccf2]">Confidence</th>
+                            <th className="pb-2 font-bold px-2 text-slate-400">Difficulty</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/50">
+                          {(experimentSummary?.categoryAggregates || []).map((agg, idx) => (
+                            <tr key={idx} className="hover:bg-slate-800/30 transition-colors">
+                              <td className="py-2.5 px-2 text-slate-300 font-bold">{agg.category}</td>
+                              <td className="py-2.5 px-2 text-slate-500">{agg.count}</td>
+                              <td className={`py-2.5 px-2 font-bold ${instabilityTone(agg.instability)}`}>{agg.instability.toFixed(3)}</td>
+                              <td className="py-2.5 px-2 font-bold text-[#0dccf2]">{agg.confidence.toFixed(3)}</td>
+                              <td className={`py-2.5 px-2 ${difficultyTone(difficultyLabel(agg.difficulty))}`}>{agg.difficulty.toFixed(3)}</td>
                             </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-800/50">
-                            {experimentSummary.categoryAggregates.map((agg, idx) => (
-                              <tr key={idx} className="hover:bg-slate-800/30 transition-colors">
-                                <td className="py-2.5 px-2 text-slate-300 font-bold">{agg.category}</td>
-                                <td className="py-2.5 px-2 text-slate-500">{agg.count}</td>
-                                <td className={`py-2.5 px-2 font-bold ${instabilityTone(agg.instability)}`}>{agg.instability.toFixed(3)}</td>
-                                <td className="py-2.5 px-2 font-bold text-[#0dccf2]">{agg.confidence.toFixed(3)}</td>
-                                <td className={`py-2.5 px-2 ${difficultyTone(difficultyLabel(agg.difficulty))}`}>{agg.difficulty.toFixed(3)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-
-                    <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4">
-                      <p className="text-[10px] uppercase font-black tracking-widest text-slate-500 mb-4 pl-1">Stability Curves (Mean by Temperature)</p>
-                      <div className="h-[200px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <LineChart data={experimentSummary.instabilityCurve}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
-                            <XAxis dataKey="temperature" fontSize={9} stroke="#475569" axisLine={false} tickLine={false} />
-                            <YAxis fontSize={9} stroke="#475569" axisLine={false} tickLine={false} />
-                            <Tooltip contentStyle={{ backgroundColor: "#020617", border: "1px solid #1e293b", fontSize: "10px" }} />
-                            <Line type="monotone" dataKey="value" stroke="#f59e0b" strokeWidth={3} dot={{ fill: "#f59e0b", r: 4 }} activeDot={{ r: 6 }} name="Instability" />
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </div>
+                          ))}
+                          {!experimentSummary?.categoryAggregates?.length && (
+                            <tr>
+                              <td colSpan={5} className="py-8 text-center text-slate-600 italic">No category data available</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
 
-                  <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4 flex flex-col">
-                    <p className="text-[10px] uppercase font-black tracking-widest text-slate-500 mb-4 pl-1">Historical Timeline</p>
-                    <div className="flex-1 flex flex-col min-h-[300px]">
-                      <div className="flex-1 flex items-end gap-[2px] h-full">
-                        {experimentResults.map((r, i) => (
-                          <div
-                            key={i}
-                            title={`Run ${i + 1}: ${r.instability.toFixed(3)}`}
-                            className={`w-full min-w-[2px] rounded-t-sm transition-all hover:brightness-125 ${r.escalate ? "bg-orange-500" : "bg-[#0dccf2]/60"}`}
-                            style={{ height: `${Math.max(4, r.instability * 100)}%` }}
-                          />
-                        ))}
+                  <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4">
+                    <p className="text-[10px] uppercase font-black tracking-widest text-slate-500 mb-4 pl-1">Stability Curves (Mean by Temperature)</p>
+                    <div className="h-[200px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={experimentSummary?.instabilityCurve || []}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
+                          <XAxis dataKey="temperature" fontSize={9} stroke="#475569" axisLine={false} tickLine={false} />
+                          <YAxis fontSize={9} stroke="#475569" axisLine={false} tickLine={false} />
+                          <Tooltip contentStyle={{ backgroundColor: "#020617", border: "1px solid #1e293b", fontSize: "10px" }} />
+                          <Line type="monotone" dataKey="value" stroke="#f59e0b" strokeWidth={3} dot={{ fill: "#f59e0b", r: 4 }} activeDot={{ r: 6 }} name="Instability" />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4 flex flex-col">
+                  <p className="text-[10px] uppercase font-black tracking-widest text-slate-500 mb-4 pl-1">Historical Timeline</p>
+                  <div className="flex-1 flex flex-col min-h-[300px]">
+                    <div className="flex-1 flex items-end gap-[2px] h-full">
+                      {experimentResults.map((r, i) => (
+                        <div
+                          key={i}
+                          title={`Run ${i + 1}: ${r.instability.toFixed(3)}`}
+                          className={`w-full min-w-[2px] rounded-t-sm transition-all hover:brightness-125 ${r.escalate ? "bg-orange-500" : "bg-[#0dccf2]/60"}`}
+                          style={{ height: `${Math.max(4, r.instability * 100)}%` }}
+                        />
+                      ))}
+                    </div>
+                    <div className="mt-4 pt-4 border-t border-slate-800 space-y-4">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[9px] uppercase font-bold text-slate-500">Peak Instability</span>
+                        <span className="text-xs font-mono text-orange-400 font-black">
+                          {experimentResults.length > 0 ? Math.max(...experimentResults.map(r => r.instability)).toFixed(3) : "0.000"}
+                        </span>
                       </div>
-                      <div className="mt-4 pt-4 border-t border-slate-800 space-y-4">
-                        <div className="flex justify-between items-center">
-                          <span className="text-[9px] uppercase font-bold text-slate-500">Peak Instability</span>
-                          <span className="text-xs font-mono text-orange-400 font-black">{Math.max(...experimentResults.map(r => r.instability)).toFixed(3)}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-[9px] uppercase font-bold text-slate-500">Benchmark Mean</span>
-                          <span className="text-xs font-mono text-[#0dccf2] font-black">{experimentSummary.meanInstability.toFixed(3)}</span>
-                        </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-[9px] uppercase font-bold text-slate-500">Benchmark Mean</span>
+                        <span className="text-xs font-mono text-[#0dccf2] font-black">
+                          {experimentSummary ? experimentSummary.meanInstability.toFixed(3) : "0.000"}
+                        </span>
                       </div>
                     </div>
                   </div>
                 </div>
-              )}
+              </div>
             </div>
           </div>
         </Panel>
