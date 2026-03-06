@@ -2346,6 +2346,7 @@ export default function Home() {
                             <th className="pb-2 font-bold px-2 text-amber-500">Instability</th>
                             <th className="pb-2 font-bold px-2 text-[#0dccf2]">Confidence</th>
                             <th className="pb-2 font-bold px-2 text-slate-400">Difficulty</th>
+                            <th className="pb-2 font-bold px-2 text-purple-400">Entropy</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800/50">
@@ -2356,11 +2357,12 @@ export default function Home() {
                               <td className={`py-2.5 px-2 font-bold ${instabilityTone(agg.instability)}`}>{agg.instability.toFixed(3)}</td>
                               <td className="py-2.5 px-2 font-bold text-[#0dccf2]">{agg.confidence.toFixed(3)}</td>
                               <td className={`py-2.5 px-2 ${difficultyTone(difficultyLabel(agg.difficulty))}`}>{agg.difficulty.toFixed(3)}</td>
+                              <td className={`py-2.5 px-2 font-bold ${entropyTone(agg.entropy)}`}>{agg.entropy.toFixed(3)}</td>
                             </tr>
                           ))}
                           {!experimentSummary?.categoryAggregates?.length && (
                             <tr>
-                              <td colSpan={5} className="py-8 text-center text-slate-600 italic">No category data available</td>
+                              <td colSpan={6} className="py-8 text-center text-slate-600 italic">No category data available</td>
                             </tr>
                           )}
                         </tbody>
