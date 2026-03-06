@@ -2259,7 +2259,7 @@ export default function Home() {
                   <p className="text-[10px] text-slate-500 uppercase tracking-wider">
                     Dataset Ready: {datasetItems.length} research prompts loaded
                   </p>
-                  {experimentSummary && (
+                  {(experimentSummary || experimentResults.length > 0) && (
                     <button
                       onClick={generateResearchReport}
                       disabled={reportLoading}
