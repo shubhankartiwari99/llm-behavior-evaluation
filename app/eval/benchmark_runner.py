@@ -13,6 +13,10 @@ async def run_benchmark(prompts: List[Dict[str, str]], engine: Any, validated_pa
     results = []
     total = len(prompts)
     
+    # Per-prompt timeout: prevents a slow/looping model generation from
+    # hanging the entire batch request until FastAPI's server timeout fires.
+    PROMPT_TIMEOUT_SECONDS = 180
+
     for i, item in enumerate(prompts):
         prompt_text = item.get("prompt", "")
         if not prompt_text:
@@ -24,9 +28,22 @@ async def run_benchmark(prompts: List[Dict[str, str]], engine: Any, validated_pa
             "prompt": prompt_text
         }
         
-        # Run the full reliability pipeline in a thread
-        result = await asyncio.to_thread(run_inference_pipeline, engine, eval_payload)
-        results.append(result)
+        try:
+            # Run the full reliability pipeline in a thread, with a timeout guard
+            result = await asyncio.wait_for(
+                asyncio.to_thread(run_inference_pipeline, engine, eval_payload),
+                timeout=PROMPT_TIMEOUT_SECONDS,
+            )
+            results.append(result)
+        except asyncio.TimeoutError:
+            import logging
+            logging.warning(
+                "Prompt %d/%d timed out after %ds — skipping: %.80r",
+                i + 1, total, PROMPT_TIMEOUT_SECONDS, prompt_text,
+            )
+        except Exception as exc:
+            import logging
+            logging.warning("Prompt %d/%d failed (%s) — skipping.", i + 1, total, exc)
         
     from app.engine_identity import ENGINE_NAME
     summary = summarize_benchmark(results)
@@ -49,7 +66,7 @@ def summarize_benchmark(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     confidence_scores = [r["confidence"] for r in results]
     instability_scores = [r["instability"] for r in results]
     uncertainty_scores = [r.get("uncertainty", 0.0) for r in results]
-    entropy_scores = [r.get("mean_entropy", 0.0) for r in results]
+    entropy_scores = [r.get("entropy", 0.0) for r in results]
     latency_scores = [r["latency_ms"] for r in results]
     tokens_out = [r["output_tokens"] for r in results]
     

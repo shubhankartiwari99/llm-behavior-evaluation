@@ -1776,6 +1776,7 @@ export default function Home() {
     try {
       const BATCH_SIZE = 10
       const allResults: any[] = []
+      const skippedBatches: number[] = []
       let lastSummary: any = null
       let currentFinalRows: any[] = []
 
@@ -1802,7 +1803,11 @@ export default function Home() {
         }
 
         if (!resp || !resp.ok) {
-          console.error("Batch " + i + " failed after 3 attempts, skipping")
+          skippedBatches.push(i)
+          console.warn(
+            `Skipped batch at index ${i} (prompts ${i + 1}–${Math.min(i + BATCH_SIZE, flatPrompts.length)} of ${flatPrompts.length}) after 3 failed attempts.`,
+            { status: resp?.status, url: `/api/evaluate/benchmark` }
+          )
           continue
         }
 
@@ -2199,7 +2204,9 @@ export default function Home() {
               <button onClick={runExperiment} disabled={experimentRunning || datasetItems.length === 0 || modelStatus !== "ready"}
                 className="flex items-center gap-2 bg-[#0dccf2]/10 border border-[#0dccf2]/30 px-4 py-2 rounded-lg text-xs font-bold text-[#0dccf2] hover:bg-[#0dccf2]/20 transition-colors uppercase tracking-widest disabled:opacity-40">
                 <FlaskConical className="h-3.5 w-3.5" />
-                {experimentRunning ? "Running Pipeline..." : "Initialize Batch Run"}
+                {experimentRunning
+                  ? `Running Pipeline... ${experimentProgress.total > 0 ? Math.round((experimentProgress.done / experimentProgress.total) * 100) : 0}%`
+                  : "Initialize Batch Run"}
               </button>
               {datasetItems.length > 0 && (
                 <div className="flex items-center gap-4">
