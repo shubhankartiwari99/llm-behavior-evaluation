@@ -1,6 +1,15 @@
 Indian Desi LLM Inference Engine
 
-Public API Contract - Version 1.1.0 (B21)
+Public API Contract - Version 1.2.0 (B22)
+
+---
+
+CHANGELOG from v1.1.0 (B21)
+  - Added `GET /api/registry/history` for deployment provenance and release governance.
+  - Added token-level forensics fields: `token_entropy_available`, `token_entropy[*].entropy`,
+    and `token_entropy[*].instability`.
+  - Added `trace.monte_carlo_analysis.token_instability_trace` for per-position stochastic drift.
+  - API contract version advanced to 1.2.0 for the expanded response and registry surface.
 
 ---
 
@@ -16,7 +25,7 @@ CHANGELOG from v1.0.0 (B20)
 
 1. Overview
 
-This document defines the public API surface of the engine core (v1.1.0).
+This document defines the public API surface for contract version 1.2.0.
 
 The engine guarantees:
   - Multilingual guardrail parity (English and Hindi).
@@ -78,6 +87,14 @@ On success (HTTP 200):
   "sample_count": integer,
   "resampled": boolean,
   "samples_used": integer,
+  "token_entropy_available": boolean,
+  "token_entropy": [
+    {
+      "text": "string",
+      "entropy": number,
+      "instability": number | null
+    }
+  ],
   "semantic_dispersion": number,
   "cluster_count": integer,
   "cluster_entropy": number,
@@ -107,6 +124,7 @@ On success (HTTP 200):
       "entropy": number,
       "uncertainty": number,
       "uncertainty_level": "low" | "moderate" | "high" | "critical",
+      "token_instability_trace": number[],
       "resampled": boolean,
       "samples_used": integer,
       "reliability_guard": {
@@ -209,13 +227,47 @@ Response
 
 {
   "engine_name": "indian-desi-llm-inference-core",
-  "engine_version": "1.1.0",
-  "release_stage": "B21"
+  "engine_version": "1.0.2",
+  "release_stage": "B22"
 }
 
 ---
 
-9. Error Handling
+9. Endpoint: /api/registry/history
+
+Method
+
+GET
+
+Response
+
+[
+  {
+    "release_id": "string",
+    "model_id": "string",
+    "git_commit_hash": "string",
+    "weights_fingerprint": "string",
+    "fragility_score": number,
+    "status": "staging" | "production" | "rollback" | "retired",
+    "environment": "string",
+    "deployed_at": "ISO-8601 timestamp",
+    "evaluation": {
+      "evaluation_run_id": "string",
+      "snapshot_id": "string",
+      "verdict": "GO" | "NO_GO",
+      "regression_summary": {
+        "fatal_count": integer,
+        "warning_count": integer,
+        "info_count": integer,
+        "triggered_checks": string[]
+      }
+    }
+  }
+]
+
+---
+
+10. Error Handling
 
 400 - INVALID_INPUT
 
@@ -242,8 +294,8 @@ No internal stack traces are exposed.
 
 ---
 
-10. Engine Version
+11. Engine Version
 
-This document reflects engine version 1.1.0 (B21).
+This document reflects API contract version 1.2.0 for engine release 1.0.2 (B22).
 Changes to request or response shape constitute a breaking change
 and require a version increment.

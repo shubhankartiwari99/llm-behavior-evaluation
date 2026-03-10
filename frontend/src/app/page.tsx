@@ -1780,7 +1780,7 @@ export default function Home() {
     setDeploymentsError(null)
 
     try {
-      const res = await apiFetch("/registry/history", { cache: "no-store" })
+      const res = await apiFetch("/api/registry/history", { cache: "no-store" })
       if (!res.ok) {
         throw new Error(`Registry fetch failed (HTTP ${res.status})`)
       }

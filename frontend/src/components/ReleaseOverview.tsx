@@ -20,8 +20,8 @@ function getStatusClasses(status: ReleaseStatus): string {
 }
 
 function getFragilityClasses(score: number): string {
-  if (score > 0.2) return "text-orange-400"
-  if (score > 0.1) return "text-amber-300"
+  if (score >= 20) return "text-orange-400"
+  if (score >= 10) return "text-amber-300"
   return "text-emerald-400"
 }
 
@@ -196,7 +196,7 @@ export default function ReleaseOverview({
                       Fragility (Stress Delta)
                     </div>
                     <div className={`mt-2 text-3xl font-black ${getFragilityClasses(release.fragility_score)}`}>
-                      {(release.fragility_score * 100).toFixed(1)}%
+                      {release.fragility_score.toFixed(1)}%
                     </div>
                     <div className="mt-2 text-[11px] uppercase tracking-widest text-slate-500">
                       {release.is_adversarially_verified ? "Adversarially verified" : "Adversarial verification pending"}
