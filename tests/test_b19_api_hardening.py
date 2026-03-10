@@ -116,7 +116,7 @@ def test_b19_api_b4_non_string_emotional_lang_rejected(monkeypatch):
 
 
 # ================================================
-# SECTION C — Valid Response Shape (4 tests)
+# SECTION C — Valid Response Shape (6 tests)
 # ================================================
 
 
@@ -156,6 +156,36 @@ def test_b19_api_c4_response_structure_deterministic(monkeypatch):
     first = client.post("/generate", json=payload).json()
     second = client.post("/generate", json=payload).json()
     assert first == second
+
+
+def test_b19_api_c5_resampled_and_samples_used_present(monkeypatch):
+    """resampled and samples_used must be present on every /generate response."""
+    client = _client_with_engine(monkeypatch, _StubEngine("safe-response"))
+    response = client.post("/generate", json={"prompt": "Tell me something uplifting.", "emotional_lang": "en"})
+    assert response.status_code == 200
+    body = response.json()
+    assert "resampled" in body, "resampled missing from response"
+    assert "samples_used" in body, "samples_used missing from response"
+    assert isinstance(body["resampled"], bool)
+    assert isinstance(body["samples_used"], int)
+
+
+def test_b19_api_c6_reliability_guard_telemetry_in_trace(monkeypatch):
+    """reliability_guard block must be present inside trace.monte_carlo_analysis."""
+    client = _client_with_engine(monkeypatch, _StubEngine("safe-response"))
+    response = client.post("/generate", json={"prompt": "Tell me something uplifting.", "emotional_lang": "en"})
+    assert response.status_code == 200
+    body = response.json()
+
+    mc = body.get("trace", {}).get("monte_carlo_analysis", {})
+    assert mc, "monte_carlo_analysis missing from trace"
+
+    guard = mc.get("reliability_guard")
+    assert guard is not None, "reliability_guard missing from monte_carlo_analysis"
+    assert "triggered" in guard
+    assert "initial_instability" in guard
+    assert "threshold" in guard
+    assert isinstance(guard["triggered"], bool)
 
 
 # ================================================

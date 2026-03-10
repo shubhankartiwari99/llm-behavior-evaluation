@@ -58,7 +58,7 @@ _REQUEST_KEYS = {
     "do_sample",
     "monte_carlo_samples",
 }
-_TRACE_KEYS = ("turn", "guardrail", "skeleton", "tone_profile", "selection", "replay_hash")
+_TRACE_KEYS = ("turn", "guardrail", "skeleton", "tone_profile", "selection", "replay_hash", "monte_carlo_analysis")
 _ALLOWED_MODES = {"", "factual", "emotional", "mixed"}
 _MODE_ALIASES = {"explanatory": "factual"}
 
