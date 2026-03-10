@@ -88,8 +88,25 @@ def summarize_benchmark(results: List[Dict[str, Any]]) -> Dict[str, Any]:
         if rg.get("triggered") and isinstance(rg.get("instability_delta"), (int, float)):
             guard_deltas.append(rg["instability_delta"])
 
+    # Hallucination proxy: fraction of results with detected instability or divergence
+    hallucination_tags = {"stochastic_instability", "semantic_divergence"}
+    hallucination_count = sum(
+        1 for r in results
+        if hallucination_tags.intersection(r.get("failures") or [])
+    )
+
     def mean_safe(data):
         return statistics.mean(data) if data else 0.0
+
+    def stdev_safe(data):
+        return statistics.stdev(data) if len(data) >= 2 else 0.0
+
+    def percentile(data, pct):
+        if not data:
+            return 0.0
+        s = sorted(data)
+        k = max(0, min(int(len(s) * pct / 100), len(s) - 1))
+        return s[k]
 
     summary = {
         "total": total,
@@ -97,6 +114,9 @@ def summarize_benchmark(results: List[Dict[str, Any]]) -> Dict[str, Any]:
         "mean_instability": mean_safe(instability_scores),
         "mean_uncertainty": mean_safe(uncertainty_scores),
         "mean_entropy": mean_safe(entropy_scores),
+        "entropy_std_dev": stdev_safe(entropy_scores),
+        "confidence_p90": percentile(confidence_scores, 90),
+        "hallucination_proxy_rate": hallucination_count / total if total > 0 else 0.0,
         "escalation_rate": escalations / total if total > 0 else 0.0,
         "guard_trigger_rate": guard_triggers / total if total > 0 else 0.0,
         "mean_guard_instability_delta": mean_safe(guard_deltas),
@@ -105,6 +125,7 @@ def summarize_benchmark(results: List[Dict[str, Any]]) -> Dict[str, Any]:
         "distributions": {
             "confidence": confidence_scores,
             "instability": instability_scores,
+            "entropy": entropy_scores,
         },
         "timestamp": datetime.datetime.now().isoformat(),
     }
