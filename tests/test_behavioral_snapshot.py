@@ -29,6 +29,7 @@ BASELINE_DICT = {
         "model_id": "test-model-baseline",
         "timestamp": "2026-01-01T00:00:00Z",
         "eval_prompt_count": 50,
+        "contract_fingerprint": "cc0b3f0f92a6911e60f28cfa7c03c5831a206b6c8f7a281e91c8627eef455ae5",
         "quantization": "none",
         "deployment_env": "test",
     },
@@ -41,6 +42,8 @@ BASELINE_DICT = {
             "mean_entropy": 0.28,
             "entropy_std_dev": 0.10,
             "mean_instability": 0.18,
+            "raw_entropy_trace": [0.25, 0.28, 0.30, 0.27, 0.29, 0.26, 0.28, 0.30, 0.25, 0.32],
+            "raw_instability_trace": [0.15, 0.18, 0.20, 0.17, 0.19, 0.16, 0.18, 0.20, 0.15, 0.22],
         },
         "reliability": {
             "mean_confidence": 0.82,
@@ -51,6 +54,11 @@ BASELINE_DICT = {
     "system_perf": {
         "avg_latency_ms": 1850.0,
         "avg_output_tokens": 112.0,
+    },
+    "telemetry_dna": {
+        "raw_entropy_trace": [0.25, 0.28, 0.30, 0.27, 0.29, 0.26, 0.28, 0.30, 0.25, 0.32],
+        "raw_instability_trace": [0.15, 0.18, 0.20, 0.17, 0.19, 0.16, 0.18, 0.20, 0.15, 0.22],
+        "raw_confidence_trace": [0.75, 0.80, 0.82, 0.85, 0.90, 0.91, 0.92, 0.88, 0.79, 0.83],
     },
 }
 
@@ -149,11 +157,26 @@ class TestSnapshotCapturer:
         assert snap.snapshot_metadata.model_id == "custom-model"
         assert snap.snapshot_metadata.deployment_env == "staging"
 
+    def test_from_summary_embeds_contract_fingerprint(self):
+        summary = _make_summary()
+        snap = SnapshotCapturer.from_benchmark_summary(summary)
+        assert snap.snapshot_metadata.contract_fingerprint
+        assert len(snap.snapshot_metadata.contract_fingerprint) == 64
+
+    def test_from_summary_embeds_raw_traces(self):
+        summary = _make_summary()
+        snap = SnapshotCapturer.from_benchmark_summary(summary)
+        assert snap.behavioral_invariants.reasoning.raw_entropy_trace == summary["distributions"]["entropy"]
+        assert snap.behavioral_invariants.reasoning.raw_instability_trace == summary["distributions"]["instability"]
+        assert snap.telemetry_dna.raw_confidence_trace == summary["distributions"]["confidence"]
+
     def test_roundtrip_json(self):
         summary = _make_summary()
         snap = SnapshotCapturer.from_benchmark_summary(summary)
         restored = BehavioralSnapshot.from_dict(json.loads(snap.to_json()))
         assert restored.snapshot_metadata.model_id == snap.snapshot_metadata.model_id
+        assert restored.snapshot_metadata.contract_fingerprint == snap.snapshot_metadata.contract_fingerprint
+        assert restored.behavioral_invariants.reasoning.raw_entropy_trace == snap.behavioral_invariants.reasoning.raw_entropy_trace
         assert restored.behavioral_invariants.reasoning.mean_entropy == pytest.approx(
             snap.behavioral_invariants.reasoning.mean_entropy
         )
@@ -186,6 +209,20 @@ class TestDeltaCalculatorGoVerdict:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestDeltaCalculatorFatal:
+    def test_contract_fingerprint_mismatch_is_fatal(self):
+        baseline_path = _baseline_file()
+        calc = DeltaCalculator(baseline_path)
+        current = _clean_current()
+        current.snapshot_metadata.contract_fingerprint = "0" * 64
+        report = calc.compute_drift(current)
+        assert report.verdict == "NO_GO"
+        assert any(
+            r.metric == "contract.contract_fingerprint"
+            and r.failure_mode == "contract_drift"
+            and r.tier == "FATAL"
+            for r in report.regressions
+        )
+
     def test_escalation_rate_fatal_breach(self):
         baseline_path = _baseline_file()
         calc = DeltaCalculator(baseline_path)
@@ -225,6 +262,20 @@ class TestDeltaCalculatorFatal:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestDeltaCalculatorWarning:
+    def test_entropy_distribution_drift_warning_even_when_mean_is_flat(self):
+        baseline_path = _baseline_file()
+        calc = DeltaCalculator(baseline_path)
+        current = _clean_current()
+        current.behavioral_invariants.reasoning.mean_entropy = 0.28
+        current.behavioral_invariants.reasoning.raw_entropy_trace = [0.12, 0.12, 0.12, 0.12, 0.12, 0.44, 0.44, 0.44, 0.44, 0.44]
+        report = calc.compute_drift(current)
+        assert any(
+            r.metric == "reasoning.conceptual_drift"
+            and r.tier == "WARNING"
+            and r.failure_mode == "conceptual_drift"
+            for r in report.regressions
+        )
+
     def test_entropy_std_dev_warning(self):
         """The 'hallucinating with confidence' detector."""
         baseline_path = _baseline_file()
@@ -255,8 +306,12 @@ class TestDeltaCalculatorWarning:
         # 21% jump over 0.18 → 0.218
         current.behavioral_invariants.reasoning.mean_instability = 0.18 * 1.21
         report = calc.compute_drift(current)
-        assert any(r.metric == "reasoning.mean_instability" and r.tier == "WARNING"
-                   for r in report.regressions)
+        assert any(
+            r.metric == "reasoning.mean_instability"
+            and r.tier == "WARNING"
+            and r.failure_mode == "stochastic_instability"
+            for r in report.regressions
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -322,3 +377,4 @@ class TestRegressionReportRender:
         assert "verdict" in parsed
         assert "regressions" in parsed
         assert "regression_count" in parsed
+        assert "failure_modes" in parsed

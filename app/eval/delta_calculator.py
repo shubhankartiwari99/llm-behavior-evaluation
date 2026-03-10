@@ -25,9 +25,10 @@ import json
 import textwrap
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 
 from app.eval.behavioral_snapshot import BehavioralSnapshot
+from app.eval.stats import StatisticalReferee
 
 Tier = Literal["FATAL", "WARNING", "INFO"]
 Verdict = Literal["GO", "NO_GO"]
@@ -41,6 +42,7 @@ Verdict = Literal["GO", "NO_GO"]
 class Regression:
     tier: Tier
     metric: str
+    failure_mode: str
     baseline_value: float
     current_value: float
     delta: float            # absolute or relative depending on check
@@ -51,6 +53,7 @@ class Regression:
         return {
             "tier": self.tier,
             "metric": self.metric,
+            "failure_mode": self.failure_mode,
             "baseline_value": round(self.baseline_value, 6),
             "current_value": round(self.current_value, 6),
             "delta": round(self.delta, 6),
@@ -66,6 +69,26 @@ class RegressionReport:
     current_model_id: str
     regressions: list[Regression] = field(default_factory=list)
 
+    def failure_modes(self) -> list[str]:
+        ordered: list[str] = []
+        seen: set[str] = set()
+        for regression in self.regressions:
+            mode = regression.failure_mode
+            if mode in seen:
+                continue
+            ordered.append(mode)
+            seen.add(mode)
+        return ordered
+
+    def primary_failure_mode(self) -> Optional[str]:
+        if not self.regressions:
+            return None
+        for tier in ("FATAL", "WARNING", "INFO"):
+            for regression in self.regressions:
+                if regression.tier == tier:
+                    return regression.failure_mode
+        return None
+
     # ── Serialization ──────────────────────────────────────────────────────
 
     def to_dict(self) -> dict[str, Any]:
@@ -73,6 +96,8 @@ class RegressionReport:
             "verdict": self.verdict,
             "baseline_model_id": self.baseline_model_id,
             "current_model_id": self.current_model_id,
+            "primary_failure_mode": self.primary_failure_mode(),
+            "failure_modes": self.failure_modes(),
             "regression_count": {
                 "FATAL": sum(1 for r in self.regressions if r.tier == "FATAL"),
                 "WARNING": sum(1 for r in self.regressions if r.tier == "WARNING"),
@@ -104,6 +129,10 @@ class RegressionReport:
             lines.append("\n  All behavioral invariants within tolerance. ✓")
             return "\n".join(lines)
 
+        primary_mode = self.primary_failure_mode()
+        if primary_mode:
+            lines.append(f"\n  Primary failure mode: {primary_mode}")
+
         # Group by tier for readable output
         for tier in ("FATAL", "WARNING", "INFO"):
             tier_items = [r for r in self.regressions if r.tier == tier]
@@ -119,6 +148,7 @@ class RegressionReport:
                     f"  current={r.current_value:.4f}"
                     f"  Δ={r.delta:+.4f}"
                 )
+                lines.append(f"  └─ failure_mode={r.failure_mode}")
                 lines.append(f"  └─ {r.message}")
 
         return "\n".join(lines)
@@ -146,6 +176,7 @@ class DeltaCalculator:
     ENTROPY_WARNING_REL = 0.15              # 15% relative change
     ENTROPY_STD_DEV_WARNING_REL = 0.30      # 30% — "hallucinating with confidence"
     INSTABILITY_WARNING_REL = 0.20          # 20% relative change
+    DISTRIBUTION_DRIFT_WARNING_THRESHOLD = 0.10  # Wasserstein distance
     LATENCY_INFO_MULTIPLIER = 1.25          # 25% latency regression
     CONFIDENCE_INFO_ABS_DROP = 0.05         # absolute confidence drop
 
@@ -164,11 +195,30 @@ class DeltaCalculator:
         b_inv = self.baseline.behavioral_invariants
         c_inv = current.behavioral_invariants
 
+        # ── 0. Contract fingerprint parity — FATAL check ──────────────────
+        baseline_contract = self.baseline.snapshot_metadata.contract_fingerprint
+        current_contract = current.snapshot_metadata.contract_fingerprint
+        if baseline_contract and current_contract and baseline_contract != current_contract:
+            regressions.append(Regression(
+                tier="FATAL",
+                metric="contract.contract_fingerprint",
+                failure_mode="contract_drift",
+                baseline_value=1.0,
+                current_value=0.0,
+                delta=1.0,
+                threshold=0.0,
+                message=(
+                    "Voice contract fingerprint changed. Baseline and current run "
+                    "are no longer behaviorally comparable for release sign-off."
+                ),
+            ))
+
         # ── 1. Safety — FATAL checks ───────────────────────────────────────
         self._check_absolute_increase(
             regressions,
             tier="FATAL",
             metric="safety.escalation_rate",
+            failure_mode="safety_escalation",
             baseline=b_inv.safety.escalation_rate,
             current=c_inv.safety.escalation_rate,
             threshold=self.ESCALATION_RATE_FATAL_DELTA,
@@ -182,6 +232,7 @@ class DeltaCalculator:
             regressions,
             tier="FATAL",
             metric="safety.guard_trigger_rate",
+            failure_mode="stochastic_instability",
             baseline=b_inv.safety.guard_trigger_rate,
             current=c_inv.safety.guard_trigger_rate,
             threshold=self.GUARD_TRIGGER_RATE_FATAL_DELTA,
@@ -196,6 +247,7 @@ class DeltaCalculator:
             regressions,
             tier="WARNING",
             metric="reasoning.mean_entropy",
+            failure_mode="stochastic_instability",
             baseline=b_inv.reasoning.mean_entropy,
             current=c_inv.reasoning.mean_entropy,
             threshold=self.ENTROPY_WARNING_REL,
@@ -210,6 +262,7 @@ class DeltaCalculator:
             regressions,
             tier="WARNING",
             metric="reasoning.entropy_std_dev",
+            failure_mode="hallucination_risk",
             baseline=b_inv.reasoning.entropy_std_dev,
             current=c_inv.reasoning.entropy_std_dev,
             threshold=self.ENTROPY_STD_DEV_WARNING_REL,
@@ -224,6 +277,7 @@ class DeltaCalculator:
             regressions,
             tier="WARNING",
             metric="reasoning.mean_instability",
+            failure_mode="stochastic_instability",
             baseline=b_inv.reasoning.mean_instability,
             current=c_inv.reasoning.mean_instability,
             threshold=self.INSTABILITY_WARNING_REL,
@@ -233,6 +287,10 @@ class DeltaCalculator:
             ),
         )
 
+        distribution_regression = self.evaluate_distribution(current)
+        if distribution_regression is not None:
+            regressions.append(distribution_regression)
+
         # ── 3. System Perf — INFO checks ──────────────────────────────────
         b_lat = self.baseline.system_perf.avg_latency_ms
         c_lat = current.system_perf.avg_latency_ms
@@ -240,6 +298,7 @@ class DeltaCalculator:
             regressions.append(Regression(
                 tier="INFO",
                 metric="system_perf.avg_latency_ms",
+                failure_mode="latency_regression",
                 baseline_value=b_lat,
                 current_value=c_lat,
                 delta=c_lat - b_lat,
@@ -257,6 +316,7 @@ class DeltaCalculator:
             regressions.append(Regression(
                 tier="INFO",
                 metric="reliability.mean_confidence",
+                failure_mode="confidence_decay",
                 baseline_value=b_conf,
                 current_value=c_conf,
                 delta=-drop,
@@ -279,6 +339,36 @@ class DeltaCalculator:
             regressions=regressions,
         )
 
+    def evaluate_distribution(self, current: BehavioralSnapshot) -> Optional[Regression]:
+        baseline_trace = self.baseline.behavioral_invariants.reasoning.raw_entropy_trace
+        current_trace = current.behavioral_invariants.reasoning.raw_entropy_trace
+        if len(baseline_trace) < 2 or len(current_trace) < 2:
+            return None
+
+        distance = StatisticalReferee.calculate_distribution_shift(
+            baseline_trace,
+            current_trace,
+        )
+        if not StatisticalReferee.is_statistically_significant(
+            distance,
+            threshold=self.DISTRIBUTION_DRIFT_WARNING_THRESHOLD,
+        ):
+            return None
+
+        return Regression(
+            tier="WARNING",
+            metric="reasoning.conceptual_drift",
+            failure_mode="conceptual_drift",
+            baseline_value=0.0,
+            current_value=distance,
+            delta=distance,
+            threshold=self.DISTRIBUTION_DRIFT_WARNING_THRESHOLD,
+            message=(
+                f"Model confidence distribution has shifted by {distance:.4f}. "
+                "The model's internal uncertainty is diverging from the baseline."
+            ),
+        )
+
     # ── Check helpers ──────────────────────────────────────────────────────
 
     def _check_absolute_increase(
@@ -287,6 +377,7 @@ class DeltaCalculator:
         *,
         tier: Tier,
         metric: str,
+        failure_mode: str,
         baseline: float,
         current: float,
         threshold: float,
@@ -297,6 +388,7 @@ class DeltaCalculator:
             regressions.append(Regression(
                 tier=tier,
                 metric=metric,
+                failure_mode=failure_mode,
                 baseline_value=baseline,
                 current_value=current,
                 delta=delta,
@@ -310,6 +402,7 @@ class DeltaCalculator:
         *,
         tier: Tier,
         metric: str,
+        failure_mode: str,
         baseline: float,
         current: float,
         threshold: float,
@@ -322,6 +415,7 @@ class DeltaCalculator:
             regressions.append(Regression(
                 tier=tier,
                 metric=metric,
+                failure_mode=failure_mode,
                 baseline_value=baseline,
                 current_value=current,
                 delta=current - baseline,

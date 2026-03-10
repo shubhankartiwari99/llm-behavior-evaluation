@@ -17,6 +17,9 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from app.voice.contract_loader import get_loader
+from scripts.artifact_digest import get_deterministic_json, get_sha256_digest
+
 SCHEMA_VERSION = "1.0.0"
 
 
@@ -30,6 +33,7 @@ class SnapshotMetadata:
     model_id: str
     timestamp: str
     eval_prompt_count: int
+    contract_fingerprint: str = ""
     quantization: str = "none"
     deployment_env: str = "local"
 
@@ -45,6 +49,8 @@ class ReasoningInvariants:
     mean_entropy: float           # mean Monte Carlo entropy across prompts
     entropy_std_dev: float        # std-dev of entropy — high = "confident hallucinator"
     mean_instability: float       # mean MC instability score
+    raw_entropy_trace: list[float] = field(default_factory=list)
+    raw_instability_trace: list[float] = field(default_factory=list)
 
 
 @dataclass
@@ -68,10 +74,18 @@ class SystemPerf:
 
 
 @dataclass
+class TelemetryDNA:
+    raw_entropy_trace: list[float] = field(default_factory=list)
+    raw_instability_trace: list[float] = field(default_factory=list)
+    raw_confidence_trace: list[float] = field(default_factory=list)
+
+
+@dataclass
 class BehavioralSnapshot:
     snapshot_metadata: SnapshotMetadata
     behavioral_invariants: BehavioralInvariants
     system_perf: SystemPerf
+    telemetry_dna: TelemetryDNA = field(default_factory=TelemetryDNA)
 
     # ── Serialization ──────────────────────────────────────────────────────
 
@@ -88,18 +102,46 @@ class BehavioralSnapshot:
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "BehavioralSnapshot":
-        m = d["snapshot_metadata"]
+        m = dict(d["snapshot_metadata"])
         inv = d["behavioral_invariants"]
+        reasoning = dict(inv["reasoning"])
         perf = d["system_perf"]
+        telemetry = d.get("telemetry_dna") or {}
+        if not m.get("contract_fingerprint"):
+            m["contract_fingerprint"] = _compute_contract_fingerprint()
+
+        eval_prompt_count = int(m.get("eval_prompt_count", 0) or 0)
+        entropy_trace = _coerce_trace(
+            reasoning.get("raw_entropy_trace", telemetry.get("raw_entropy_trace")),
+            reasoning.get("mean_entropy", 0.0),
+            eval_prompt_count,
+        )
+        instability_trace = _coerce_trace(
+            reasoning.get("raw_instability_trace", telemetry.get("raw_instability_trace")),
+            reasoning.get("mean_instability", 0.0),
+            eval_prompt_count,
+        )
+        confidence_trace = _coerce_trace(
+            telemetry.get("raw_confidence_trace"),
+            inv["reliability"].get("mean_confidence", 0.0),
+            eval_prompt_count,
+        )
+        reasoning["raw_entropy_trace"] = entropy_trace
+        reasoning["raw_instability_trace"] = instability_trace
 
         return cls(
             snapshot_metadata=SnapshotMetadata(**m),
             behavioral_invariants=BehavioralInvariants(
                 safety=SafetyInvariants(**inv["safety"]),
-                reasoning=ReasoningInvariants(**inv["reasoning"]),
+                reasoning=ReasoningInvariants(**reasoning),
                 reliability=ReliabilityInvariants(**inv["reliability"]),
             ),
             system_perf=SystemPerf(**perf),
+            telemetry_dna=TelemetryDNA(
+                raw_entropy_trace=entropy_trace,
+                raw_instability_trace=instability_trace,
+                raw_confidence_trace=confidence_trace,
+            ),
         )
 
     @classmethod
@@ -138,6 +180,7 @@ class SnapshotCapturer:
             "model_id": summary.get("model", "unknown"),
             "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
             "eval_prompt_count": summary.get("total", 0),
+            "contract_fingerprint": _compute_contract_fingerprint(),
             "quantization": "none",
             "deployment_env": "local",
         }
@@ -151,7 +194,9 @@ class SnapshotCapturer:
         entropy_dist: list[float] = distributions.get(
             "entropy", summary.get("_entropy_raw", [])
         )
+        instability_dist: list[float] = distributions.get("instability", [])
         confidence_dist: list[float] = distributions.get("confidence", [])
+        eval_prompt_count = int(summary.get("total", 0) or 0)
 
         entropy_std_dev = (
             statistics.stdev(entropy_dist) if len(entropy_dist) >= 2 else 0.0
@@ -174,6 +219,16 @@ class SnapshotCapturer:
                     mean_entropy=summary.get("mean_entropy", 0.0),
                     entropy_std_dev=entropy_std_dev,
                     mean_instability=summary.get("mean_instability", 0.0),
+                    raw_entropy_trace=_coerce_trace(
+                        entropy_dist,
+                        summary.get("mean_entropy", 0.0),
+                        eval_prompt_count,
+                    ),
+                    raw_instability_trace=_coerce_trace(
+                        instability_dist,
+                        summary.get("mean_instability", 0.0),
+                        eval_prompt_count,
+                    ),
                 ),
                 reliability=ReliabilityInvariants(
                     mean_confidence=summary.get("mean_confidence", 0.0),
@@ -184,6 +239,23 @@ class SnapshotCapturer:
             system_perf=SystemPerf(
                 avg_latency_ms=summary.get("avg_latency", 0.0),
                 avg_output_tokens=summary.get("avg_output_tokens", 0.0),
+            ),
+            telemetry_dna=TelemetryDNA(
+                raw_entropy_trace=_coerce_trace(
+                    entropy_dist,
+                    summary.get("mean_entropy", 0.0),
+                    eval_prompt_count,
+                ),
+                raw_instability_trace=_coerce_trace(
+                    instability_dist,
+                    summary.get("mean_instability", 0.0),
+                    eval_prompt_count,
+                ),
+                raw_confidence_trace=_coerce_trace(
+                    confidence_dist,
+                    summary.get("mean_confidence", 0.0),
+                    eval_prompt_count,
+                ),
             ),
         )
 
@@ -200,3 +272,21 @@ def _percentile(data: list[float], pct: float) -> float:
     k = int(len(sorted_data) * pct / 100)
     k = max(0, min(k, len(sorted_data) - 1))
     return sorted_data[k]
+
+
+def _coerce_trace(
+    values: Any,
+    fallback_value: float,
+    fallback_count: int,
+) -> list[float]:
+    if isinstance(values, list) and values:
+        return [float(value) for value in values]
+    if fallback_count <= 0:
+        return []
+    return [float(fallback_value)] * int(fallback_count)
+
+
+def _compute_contract_fingerprint() -> str:
+    contract_data = get_loader()
+    canonical_contract = get_deterministic_json(contract_data)
+    return get_sha256_digest(canonical_contract)

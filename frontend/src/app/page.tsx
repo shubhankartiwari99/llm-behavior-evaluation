@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { ChangeEvent, useEffect, useMemo, useState } from "react"
 import {
   Activity,
@@ -10,6 +11,7 @@ import {
   ClipboardCheck,
   Download,
   FlaskConical,
+  History,
   Play,
   Server,
   Trash2,
@@ -18,7 +20,9 @@ import {
 } from "lucide-react"
 import StabilityChart from "@/components/StabilityChart"
 import ReliabilityDistributions from "@/components/ReliabilityDistributions"
+import ReleaseOverview from "@/components/ReleaseOverview"
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
+import { DeploymentEntry, parseDeploymentEntries } from "@/types/release"
 
 type InferenceMode = "factual" | "mixed" | "emotional"
 
@@ -1497,8 +1501,8 @@ function LanguageRoutingPanel({ data }: { data: LanguageRoutingData | null }) {
       <div className="flex flex-col items-center p-3 bg-slate-900/60 rounded-lg border border-slate-800">
         <span className="text-[9px] uppercase text-slate-500 mb-1">Resolved Language</span>
         <span className={`text-lg font-black font-mono ${data.resolved_lang === "hi" ? "text-amber-400"
-            : data.resolved_lang === "hinglish" ? "text-purple-400"
-              : "text-[#0dccf2]"
+          : data.resolved_lang === "hinglish" ? "text-purple-400"
+            : "text-[#0dccf2]"
           }`}>
           {langLabel[data.resolved_lang] ?? data.resolved_lang.toUpperCase()}
         </span>
@@ -1586,6 +1590,9 @@ export default function Home() {
   const [reportLoading, setReportLoading] = useState(false)
   const [gridResults, setGridResults] = useState<any[]>([])
   const [gridLoading, setGridLoading] = useState(false)
+  const [deployments, setDeployments] = useState<DeploymentEntry[]>([])
+  const [deploymentsLoading, setDeploymentsLoading] = useState(true)
+  const [deploymentsError, setDeploymentsError] = useState<string | null>(null)
 
   const monteCarlo = useMemo(() => {
     const mc = trace?.monte_carlo_analysis
@@ -1768,6 +1775,26 @@ export default function Home() {
     }
   }
 
+  async function fetchDeployments() {
+    setDeploymentsLoading(true)
+    setDeploymentsError(null)
+
+    try {
+      const res = await apiFetch("/registry/history", { cache: "no-store" })
+      if (!res.ok) {
+        throw new Error(`Registry fetch failed (HTTP ${res.status})`)
+      }
+      const data = await res.json()
+      setDeployments(parseDeploymentEntries(data))
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Failed to load deployment registry."
+      setDeployments([])
+      setDeploymentsError(message)
+    } finally {
+      setDeploymentsLoading(false)
+    }
+  }
+
   async function generateResearchReport() {
     if (!experimentResults || experimentResults.length === 0) return
     setReportLoading(true)
@@ -1841,6 +1868,7 @@ export default function Home() {
 
   useEffect(() => {
     fetchLeaderboard()
+    fetchDeployments()
   }, [])
 
   useEffect(() => {
@@ -2190,6 +2218,12 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-6 text-xs font-mono">
+            <Link
+              href="/playground"
+              className="rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.24em] text-amber-300 transition hover:border-amber-400/40 hover:text-amber-200"
+            >
+              Adversarial Lab
+            </Link>
             <div className="flex items-center gap-2">
               <span className={`h-2 w-2 rounded-full ${modelStatusDot} shadow-[0_0_8px]`} />
               <span className={modelStatusTone}>{modelStatusText}</span>
@@ -2461,10 +2495,10 @@ export default function Home() {
             title="Language Routing"
             subtitle="Layer 2 multilingual dispatch"
             className={`bg-slate-900/50 border-slate-800 h-[400px] flex flex-col ${(trace as any)?.language_routing?.resolved_lang === "hinglish"
-                ? "ring-1 ring-purple-500/40"
-                : (trace as any)?.language_routing?.resolved_lang === "hi"
-                  ? "ring-1 ring-amber-500/30"
-                  : ""
+              ? "ring-1 ring-purple-500/40"
+              : (trace as any)?.language_routing?.resolved_lang === "hi"
+                ? "ring-1 ring-amber-500/30"
+                : ""
               }`}
           >
             <LanguageRoutingPanel
@@ -2684,6 +2718,16 @@ export default function Home() {
             <ReliabilityHeatmap data={gridResults} loading={gridLoading} onRun={runGridEvaluation} />
           </div>
           <LeaderboardPanel data={leaderboard} />
+        </div>
+
+        {/* Layer 6: Deployment Registry */}
+        <div className="pb-8 px-1">
+          <ReleaseOverview
+            deployments={deployments}
+            loading={deploymentsLoading}
+            error={deploymentsError}
+            apiBase={API_BASE}
+          />
         </div>
       </main>
 

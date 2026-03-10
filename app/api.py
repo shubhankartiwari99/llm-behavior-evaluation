@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+from collections import Counter
 import hashlib
 import logging
 import json
 import os
 import datetime
+import statistics
 import threading
 from typing import Any
 
@@ -30,6 +32,7 @@ from app.eval.leaderboard import update_leaderboard, get_leaderboard
 from app.eval.report_generator import generate_research_report
 from app.eval.reliability_grid import run_reliability_grid
 from app.eval.failure_detector import detect_failures
+from app.registry.manager import RegistryManager
 
 app = FastAPI(
     title="Indian Desi Multilingual LLM",
@@ -297,6 +300,69 @@ def _build_api_trace(prompt: str, emotional_lang: str) -> dict[str, Any]:
     return sealed_trace
 
 
+def compute_per_token_instability(mc_metas: list[dict[str, Any]]) -> list[float]:
+    token_traces = []
+    for meta in mc_metas:
+        trace = meta.get("token_trace")
+        if isinstance(trace, list) and trace:
+            token_traces.append(trace)
+
+    if len(token_traces) < 2:
+        return []
+
+    min_len = min(len(trace) for trace in token_traces)
+    instability_trace: list[float] = []
+
+    for index in range(min_len):
+        logprobs: list[float] = []
+        token_ids: list[int] = []
+        for trace in token_traces:
+            item = trace[index]
+            if not isinstance(item, dict):
+                continue
+            logprob = item.get("logprob")
+            if isinstance(logprob, (int, float)) and not isinstance(logprob, bool):
+                logprobs.append(float(logprob))
+            token_id = item.get("token_id")
+            if isinstance(token_id, int) and not isinstance(token_id, bool):
+                token_ids.append(int(token_id))
+
+        logprob_variance = statistics.pvariance(logprobs) if len(logprobs) >= 2 else 0.0
+        token_disagreement = 0.0
+        if len(token_ids) >= 2:
+            dominant = Counter(token_ids).most_common(1)[0][1]
+            token_disagreement = 1.0 - (dominant / len(token_ids))
+
+        instability_trace.append(round(logprob_variance + token_disagreement, 6))
+
+    return instability_trace
+
+
+def _build_token_forensics(
+    det_meta: dict[str, Any],
+    token_instability_trace: list[float],
+) -> list[dict[str, Any]]:
+    base_trace = det_meta.get("token_trace")
+    if not isinstance(base_trace, list):
+        base_trace = det_meta.get("token_entropy", [])
+    if not isinstance(base_trace, list):
+        return []
+
+    token_forensics: list[dict[str, Any]] = []
+    for index, token in enumerate(base_trace):
+        if not isinstance(token, dict):
+            continue
+        entropy = token.get("entropy", 0.0)
+        token_forensics.append(
+            {
+                "text": str(token.get("text", "")),
+                "entropy": float(entropy) if isinstance(entropy, (int, float)) else 0.0,
+                "instability": token_instability_trace[index] if index < len(token_instability_trace) else None,
+            }
+        )
+    return token_forensics
+
+
 def run_inference_pipeline(runtime_engine: InferenceEngine, validated: dict[str, Any]) -> dict[str, Any]:
     _routing = route_prompt(
         prompt=validated["prompt"],
@@ -319,7 +385,8 @@ def run_inference_pipeline(runtime_engine: InferenceEngine, validated: dict[str,
         top_p=1.0,
         do_sample=False,
         max_new_tokens=validated["max_new_tokens"],
-        stop=stop_tokens
+        stop=stop_tokens,
+        include_token_entropy=True,
     )
 
     det_token_count = det_meta.get("output_tokens", len(det_response_text.split()))
@@ -329,7 +396,8 @@ def run_inference_pipeline(runtime_engine: InferenceEngine, validated: dict[str,
         "top_p": validated["top_p"],
         "do_sample": validated["do_sample"],
         "max_new_tokens": validated["max_new_tokens"],
-        "stop": stop_tokens
+        "stop": stop_tokens,
+        "include_token_entropy": True,
     }
 
     ent_outputs = []
@@ -382,20 +450,28 @@ def run_inference_pipeline(runtime_engine: InferenceEngine, validated: dict[str,
         stop_tokens=stop_tokens,
         initial_analysis=final_analysis,
         initial_ent_outputs=ent_outputs,
+        initial_ent_metas=ent_metas,
     )
     ent_outputs = guard_result["ent_outputs"]
+    final_ent_metas = guard_result.get("ent_metas", ent_metas)
     analysis = guard_result["analysis"]
 
     core_b_output = ent_outputs[0] if ent_outputs else det_response_text
-    final_ent_token_counts = ent_token_counts
-    if guard_result["resampled"]:
-        final_ent_token_counts = [len(out.split()) for out in ent_outputs]
+    final_ent_token_counts = [
+        meta.get("output_tokens", len(output.split()))
+        for output, meta in zip(ent_outputs, final_ent_metas)
+    ]
+    if not final_ent_token_counts:
+        final_ent_token_counts = ent_token_counts
     first_entropy_token_count = final_ent_token_counts[0] if final_ent_token_counts else 0
+    token_instability_trace = compute_per_token_instability(final_ent_metas)
+    token_forensics = _build_token_forensics(det_meta, token_instability_trace)
 
     trace_data = _build_api_trace(structured_prompt, validated["emotional_lang"])
     trace_data["language_routing"] = _routing.to_trace_dict()
     trace_data["monte_carlo_analysis"] = {
         "sample_count": analysis["sample_count"],
+        "token_instability_trace": token_instability_trace,
         "entropy_consistency": analysis["entropy_consistency"],
         "entropy_variance": analysis["entropy_variance"],
         "semantic_dispersion": analysis["semantic_dispersion"],
@@ -440,6 +516,8 @@ def run_inference_pipeline(runtime_engine: InferenceEngine, validated: dict[str,
         "cluster_entropy": analysis["cluster_entropy"],
         "dominant_cluster_ratio": analysis["dominant_cluster_ratio"],
         "self_consistency": analysis["self_consistency"],
+        "token_entropy_available": bool(det_meta.get("token_entropy_available", False)),
+        "token_entropy": token_forensics,
         "samples": ent_outputs,
         "failures": detect_failures(det_response_text, {
             "instability": analysis["instability"],
@@ -720,5 +798,17 @@ async def api_report(request: Request):
 @api_router.post("/evaluate/grid")
 async def api_grid(request: Request):
     return await evaluate_grid(request)
+
+@api_router.get("/registry/history")
+async def api_registry_history():
+    """Returns the timeline of model deployment events from the JSONL registry."""
+    try:
+        manager = RegistryManager()
+        entries = manager.get_all_deployments()
+        # Return raw dictionaries for FastAPI serialization
+        return [entry.dict() for entry in entries]
+    except Exception as e:
+        logging.error(f"Error reading deployment registry: {e}")
+        return []
 
 app.include_router(api_router)

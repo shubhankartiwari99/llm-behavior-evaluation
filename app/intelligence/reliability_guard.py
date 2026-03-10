@@ -56,6 +56,7 @@ def run_fallback_sampling(
 
     Returns a dict with:
       - ent_outputs: list of sampled texts
+      - ent_metas: list of per-run metadata
       - analysis: evaluate_dual_plane result
       - samples_used: how many MC samples were taken
     """
@@ -65,6 +66,7 @@ def run_fallback_sampling(
         "do_sample": True,
         "max_new_tokens": validated["max_new_tokens"],
         "stop": stop_tokens,
+        "include_token_entropy": True,
     }
 
     ent_outputs: list[str] = []
@@ -117,6 +119,7 @@ def run_fallback_sampling(
 
     return {
         "ent_outputs": ent_outputs,
+        "ent_metas": ent_metas,
         "analysis": final_analysis,
         "samples_used": len(ent_outputs),
     }
@@ -131,6 +134,7 @@ def apply_reliability_guard(
     stop_tokens: list[str],
     initial_analysis: dict[str, Any],
     initial_ent_outputs: list[str],
+    initial_ent_metas: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """
     Main entry point for the reliability guard.
@@ -145,6 +149,7 @@ def apply_reliability_guard(
         return {
             "resampled": False,
             "ent_outputs": initial_ent_outputs,
+            "ent_metas": list(initial_ent_metas or []),
             "analysis": initial_analysis,
             "samples_used": len(initial_ent_outputs),
             "reliability_guard": {
@@ -188,6 +193,7 @@ def apply_reliability_guard(
     return {
         "resampled": True,
         "ent_outputs": fallback_result["ent_outputs"],
+        "ent_metas": list(fallback_result.get("ent_metas", [])),
         "analysis": fallback_result["analysis"],
         "samples_used": fallback_result["samples_used"],
         "reliability_guard": {

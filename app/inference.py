@@ -1085,7 +1085,7 @@ class InferenceEngine:
             )
             return self.backend.generate(formatted, max_new_tokens, stop=kwargs.get("stop"))
         elif MODEL_BACKEND == "hf":
-            raw_output = self.backend.generate(
+            return self.backend.generate(
                 prompt=user_text,
                 max_new_tokens=max_new_tokens,
                 temperature=kwargs.get("temperature", 0.7),
@@ -1093,9 +1093,9 @@ class InferenceEngine:
                 do_sample=kwargs.get("do_sample", True),
                 repetition_penalty=kwargs.get("repetition_penalty", 1.1),
                 no_repeat_ngram_size=kwargs.get("no_repeat_ngram_size", 3),
-                stop=kwargs.get("stop")
+                stop=kwargs.get("stop"),
+                include_token_entropy=bool(kwargs.get("include_token_entropy", False)),
             )
-            return raw_output[0] if isinstance(raw_output, tuple) else raw_output
 
     def _build_explanatory_shape_prompt(self, prompt: str, conditioned_prompt: str) -> str:
         constraints = self._explanatory_constraints(prompt)
@@ -1885,7 +1885,7 @@ class InferenceEngine:
                     )
                     return self._pack(recovered_final, meta, return_meta)
 
-        meta = {}
+        meta = dict(meta)
         if os.environ.get("RUNTIME_DIAGNOSTICS") == "1":
             meta["source"] = "model"
         if semantic_dropped_reason:

@@ -1,7 +1,11 @@
 import asyncio
 import datetime
+import logging
+import os
 import statistics
 from typing import Any, Dict, List
+
+from app.eval.async_runner import AsyncEvalHarness
 
 
 async def run_benchmark(
@@ -10,47 +14,71 @@ async def run_benchmark(
     validated_params: Dict[str, Any],
 ):
     """
-    Sequentially runs reliability evaluation for each prompt in the list.
+    Runs reliability evaluation for the prompt batch with bounded concurrency.
     """
-    from app.api import run_inference_pipeline
-
     results = []
     total = len(prompts)
+    logger = logging.getLogger(__name__)
 
     # Per-prompt timeout: prevents a slow/looping model generation from
     # hanging the entire batch request until FastAPI's server timeout fires.
     prompt_timeout_seconds = 180
+    benchmark_concurrency = max(1, int(os.environ.get("BENCHMARK_CONCURRENCY", "5")))
 
+    work_items = []
     for i, item in enumerate(prompts):
         prompt_text = item.get("prompt", "")
         if not prompt_text:
             continue
 
-        eval_payload = {
-            **validated_params,
-            "prompt": prompt_text,
-        }
+        work_items.append(
+            {
+                "index": i,
+                "total": total,
+                "prompt": prompt_text,
+                "payload": {
+                    **validated_params,
+                    "prompt": prompt_text,
+                },
+            }
+        )
 
-        try:
-            result = await asyncio.wait_for(
-                asyncio.to_thread(run_inference_pipeline, engine, eval_payload),
-                timeout=prompt_timeout_seconds,
+    harness = AsyncEvalHarness(
+        engine=engine,
+        concurrency=benchmark_concurrency,
+        timeout_seconds=prompt_timeout_seconds,
+    )
+    batch_results = await harness.run_batch([item["payload"] for item in work_items])
+
+    for item, outcome in zip(work_items, batch_results):
+        if not isinstance(outcome, dict):
+            logger.warning(
+                "Prompt %d/%d returned unexpected result type - skipping.",
+                item["index"] + 1,
+                item["total"],
             )
-            results.append(result)
-        except asyncio.TimeoutError:
-            import logging
+            continue
 
-            logging.warning(
-                "Prompt %d/%d timed out after %ds - skipping: %.80r",
-                i + 1,
-                total,
-                prompt_timeout_seconds,
-                prompt_text,
+        if "error" in outcome:
+            if outcome.get("error_type") == "timeout":
+                logger.warning(
+                    "Prompt %d/%d timed out after %ds - skipping: %.80r",
+                    item["index"] + 1,
+                    item["total"],
+                    prompt_timeout_seconds,
+                    item["prompt"],
+                )
+                continue
+
+            logger.warning(
+                "Prompt %d/%d failed (%s) - skipping.",
+                item["index"] + 1,
+                item["total"],
+                outcome["error"],
             )
-        except Exception as exc:
-            import logging
+            continue
 
-            logging.warning("Prompt %d/%d failed (%s) - skipping.", i + 1, total, exc)
+        results.append(outcome)
 
     from app.engine_identity import ENGINE_NAME
 
