@@ -135,7 +135,7 @@ def test_b19_api_c2_response_shape_is_sealed(monkeypatch):
     body = response.json()
     assert {"response_text", "trace", "confidence", "instability", "escalate"}.issubset(body.keys())
     assert set(body["trace"].keys()) <= {
-        "turn", "guardrail", "skeleton", "tone_profile", "selection", "replay_hash", "monte_carlo_analysis"
+        "turn", "guardrail", "skeleton", "tone_profile", "selection", "replay_hash", "monte_carlo_analysis", "language_routing"
     }
     assert "turn" in body["trace"]
     assert "guardrail" in body["trace"]

@@ -24,6 +24,8 @@ from app.inference import InferenceEngine
 from app.tone.tone_calibration import calibrate_tone
 from app.intelligence.dual_plane import evaluate_dual_plane
 from app.intelligence.reliability_guard import apply_reliability_guard
+from app.intelligence.language_router import route_prompt
+from app.intelligence.multilingual_prompt import build_multilingual_prompt
 from app.eval.leaderboard import update_leaderboard, get_leaderboard
 from app.eval.report_generator import generate_research_report
 from app.eval.reliability_grid import run_reliability_grid
@@ -58,7 +60,7 @@ _REQUEST_KEYS = {
     "do_sample",
     "monte_carlo_samples",
 }
-_TRACE_KEYS = ("turn", "guardrail", "skeleton", "tone_profile", "selection", "replay_hash", "monte_carlo_analysis")
+_TRACE_KEYS = ("turn", "guardrail", "skeleton", "tone_profile", "selection", "replay_hash", "monte_carlo_analysis", "language_routing")
 _ALLOWED_MODES = {"", "factual", "emotional", "mixed"}
 _MODE_ALIASES = {"explanatory": "factual"}
 
@@ -296,7 +298,12 @@ def _build_api_trace(prompt: str, emotional_lang: str) -> dict[str, Any]:
 
 
 def run_inference_pipeline(runtime_engine: InferenceEngine, validated: dict[str, Any]) -> dict[str, Any]:
-    structured_prompt = build_prompt(validated.get("mode", ""), validated["prompt"])
+    _routing = route_prompt(
+        prompt=validated["prompt"],
+        declared_lang=validated["emotional_lang"],
+        mode=validated.get("mode", ""),
+    )
+    structured_prompt = build_multilingual_prompt(_routing, validated["prompt"])
     max_samples = validated["monte_carlo_samples"]
     min_samples = 4
     stability_threshold = 0.03
@@ -386,6 +393,7 @@ def run_inference_pipeline(runtime_engine: InferenceEngine, validated: dict[str,
     first_entropy_token_count = final_ent_token_counts[0] if final_ent_token_counts else 0
 
     trace_data = _build_api_trace(structured_prompt, validated["emotional_lang"])
+    trace_data["language_routing"] = _routing.to_trace_dict()
     trace_data["monte_carlo_analysis"] = {
         "sample_count": analysis["sample_count"],
         "entropy_consistency": analysis["entropy_consistency"],

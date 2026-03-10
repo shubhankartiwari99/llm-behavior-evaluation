@@ -1208,7 +1208,7 @@ function ReliabilityHeatmap({ data, loading, onRun }: { data: any[], loading: bo
         <BarChart3 className="h-10 w-10 text-slate-700" />
         <div>
           <h3 className="text-sm font-bold text-slate-300">Stability Parameter Grid</h3>
-          <p className="text-xs text-slate-500 mt-1 max-w-[300px]">Analyze model reliability across 12 combinations of Temperature and Top-P.</p>
+          <p className="text-xs text-slate-500 mt-1 max-w-[300px]">Analyze model reliability across 16 combinations of Temperature and Top-P.</p>
         </div>
         <button
           onClick={onRun}
@@ -1324,6 +1324,16 @@ type ReliabilityGuardData = {
   fallback_samples_used?: number
 }
 
+type LanguageRoutingData = {
+  detected_lang: string
+  declared_lang: string
+  resolved_lang: string
+  is_hinglish: boolean
+  resolved_intent: string
+  intent_source: string
+  routing_confidence: "high" | "medium" | "low"
+}
+
 function asFiniteNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined
 }
@@ -1433,6 +1443,85 @@ function ReliabilityGuardPanel({
       <div className="flex justify-between p-2 bg-slate-900/60 rounded border border-slate-800">
         <span className="text-[10px] uppercase text-slate-500">Threshold</span>
         <span className="text-xs font-mono text-slate-400">{guardData.threshold.toFixed(2)}</span>
+      </div>
+    </div>
+  )
+}
+
+function LanguageRoutingPanel({ data }: { data: LanguageRoutingData | null }) {
+  if (!data) {
+    return (
+      <div className="h-full flex items-center justify-center text-slate-700 font-mono text-[10px] uppercase tracking-widest text-center px-4">
+        No inference run yet
+      </div>
+    )
+  }
+
+  const confidenceColor =
+    data.routing_confidence === "high"
+      ? "text-emerald-400"
+      : data.routing_confidence === "medium"
+        ? "text-amber-400"
+        : "text-red-400"
+
+  const langLabel: Record<string, string> = {
+    en: "English",
+    hi: "Hindi",
+    hinglish: "Hinglish",
+  }
+
+  const intentColor: Record<string, string> = {
+    factual: "text-[#0dccf2]",
+    explanatory: "text-purple-400",
+    emotional: "text-amber-400",
+    conversational: "text-emerald-400",
+  }
+
+  return (
+    <div className="flex flex-col gap-2 overflow-y-auto h-full">
+      <div className="grid grid-cols-2 gap-2">
+        <div className="flex flex-col items-center p-3 bg-slate-900/60 rounded-lg border border-slate-800">
+          <span className="text-[9px] uppercase text-slate-500 mb-1">Declared</span>
+          <span className="text-sm font-mono font-black text-slate-300">
+            {langLabel[data.declared_lang] ?? data.declared_lang.toUpperCase()}
+          </span>
+        </div>
+        <div className="flex flex-col items-center p-3 bg-slate-900/60 rounded-lg border border-slate-800">
+          <span className="text-[9px] uppercase text-slate-500 mb-1">Detected</span>
+          <span className="text-sm font-mono font-black text-slate-300">
+            {langLabel[data.detected_lang] ?? data.detected_lang.toUpperCase()}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex flex-col items-center p-3 bg-slate-900/60 rounded-lg border border-slate-800">
+        <span className="text-[9px] uppercase text-slate-500 mb-1">Resolved Language</span>
+        <span className={`text-lg font-black font-mono ${data.resolved_lang === "hi" ? "text-amber-400"
+            : data.resolved_lang === "hinglish" ? "text-purple-400"
+              : "text-[#0dccf2]"
+          }`}>
+          {langLabel[data.resolved_lang] ?? data.resolved_lang.toUpperCase()}
+        </span>
+        {data.is_hinglish && (
+          <span className="text-[9px] text-purple-400 uppercase tracking-widest mt-1">Code-switching detected</span>
+        )}
+      </div>
+
+      <div className="flex justify-between p-2 bg-slate-900/60 rounded border border-slate-800">
+        <span className="text-[10px] uppercase text-slate-500">Intent</span>
+        <span className={`text-xs font-mono font-bold uppercase ${intentColor[data.resolved_intent] ?? "text-slate-300"}`}>
+          {data.resolved_intent}
+          <span className="text-slate-600 font-normal ml-1">
+            ({data.intent_source === "mode_param" ? "mode" : "auto"})
+          </span>
+        </span>
+      </div>
+
+      <div className="flex justify-between p-2 bg-slate-900/60 rounded border border-slate-800">
+        <span className="text-[10px] uppercase text-slate-500">Routing Confidence</span>
+        <span className={`text-xs font-mono font-black uppercase ${confidenceColor}`}>
+          {data.routing_confidence}
+        </span>
       </div>
     </div>
   )
@@ -2369,11 +2458,29 @@ export default function Home() {
           </Panel>
 
           <Panel
+            title="Language Routing"
+            subtitle="Layer 2 multilingual dispatch"
+            className={`bg-slate-900/50 border-slate-800 h-[400px] flex flex-col ${(trace as any)?.language_routing?.resolved_lang === "hinglish"
+                ? "ring-1 ring-purple-500/40"
+                : (trace as any)?.language_routing?.resolved_lang === "hi"
+                  ? "ring-1 ring-amber-500/30"
+                  : ""
+              }`}
+          >
+            <LanguageRoutingPanel
+              data={
+                isRecord(trace) && isRecord((trace as any).language_routing)
+                  ? (trace as any).language_routing as LanguageRoutingData
+                  : null
+              }
+            />
+          </Panel>
+
+          <Panel
             title="Reliability Guard"
             subtitle="Grid-sweep fallback layer"
-            className={`bg-slate-900/50 border-slate-800 h-[400px] flex flex-col ${
-              result?.resampled ? "ring-1 ring-amber-500/40" : ""
-            }`}
+            className={`bg-slate-900/50 border-slate-800 h-[400px] flex flex-col ${result?.resampled ? "ring-1 ring-amber-500/40" : ""
+              }`}
           >
             <ReliabilityGuardPanel
               guardData={
