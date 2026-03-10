@@ -23,6 +23,7 @@ from app.engine_identity import ENGINE_NAME, ENGINE_RELEASE_STAGE, ENGINE_VERSIO
 from app.inference import InferenceEngine
 from app.tone.tone_calibration import calibrate_tone
 from app.intelligence.dual_plane import evaluate_dual_plane
+from app.intelligence.reliability_guard import apply_reliability_guard
 from app.eval.leaderboard import update_leaderboard, get_leaderboard
 from app.eval.report_generator import generate_research_report
 from app.eval.reliability_grid import run_reliability_grid
@@ -355,20 +356,34 @@ def run_inference_pipeline(runtime_engine: InferenceEngine, validated: dict[str,
                     break
             final_analysis = analysis
 
-    core_b_output = ent_outputs[0] if ent_outputs else det_response_text
-
     ent_token_counts = [meta.get("output_tokens", len(out.split())) for out, meta in zip(ent_outputs, ent_metas)]
-    first_entropy_token_count = ent_token_counts[0] if ent_token_counts else 0
 
     if final_analysis is None:
-        analysis = evaluate_dual_plane(
+        final_analysis = evaluate_dual_plane(
             det_response_text,
             ent_outputs,
             det_token_count,
             ent_token_counts,
         )
-    else:
-        analysis = final_analysis
+
+    guard_result = apply_reliability_guard(
+        engine=runtime_engine,
+        structured_prompt=structured_prompt,
+        det_response_text=det_response_text,
+        det_token_count=det_token_count,
+        validated=validated,
+        stop_tokens=stop_tokens,
+        initial_analysis=final_analysis,
+        initial_ent_outputs=ent_outputs,
+    )
+    ent_outputs = guard_result["ent_outputs"]
+    analysis = guard_result["analysis"]
+
+    core_b_output = ent_outputs[0] if ent_outputs else det_response_text
+    final_ent_token_counts = ent_token_counts
+    if guard_result["resampled"]:
+        final_ent_token_counts = [len(out.split()) for out in ent_outputs]
+    first_entropy_token_count = final_ent_token_counts[0] if final_ent_token_counts else 0
 
     trace_data = _build_api_trace(structured_prompt, validated["emotional_lang"])
     trace_data["monte_carlo_analysis"] = {
@@ -381,6 +396,9 @@ def run_inference_pipeline(runtime_engine: InferenceEngine, validated: dict[str,
         "entropy": analysis["entropy"],
         "uncertainty": analysis["uncertainty"],
         "uncertainty_level": analysis["uncertainty_level"],
+        "reliability_guard": guard_result["reliability_guard"],
+        "resampled": guard_result["resampled"],
+        "samples_used": guard_result["samples_used"],
     }
     
     trace_log = []
@@ -407,7 +425,8 @@ def run_inference_pipeline(runtime_engine: InferenceEngine, validated: dict[str,
         "uncertainty": analysis["uncertainty"],
         "escalate": analysis["escalate"],
         "sample_count": analysis["sample_count"],
-        "samples_used": len(ent_outputs),
+        "resampled": guard_result["resampled"],
+        "samples_used": guard_result["samples_used"],
         "semantic_dispersion": analysis["semantic_dispersion"],
         "cluster_count": analysis["cluster_count"],
         "cluster_entropy": analysis["cluster_entropy"],
