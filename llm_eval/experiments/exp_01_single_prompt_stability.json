@@ -1,0 +1,33 @@
+{
+  "experiment_id": "exp_01_single_prompt_stability",
+  "title": "Single Prompt Stability",
+  "objective": "Estimate how often the model repeats the same labeled behavior for one fixed prompt.",
+  "hypothesis": "If the model is stable, one joint label pattern should dominate repeated runs.",
+  "description": "Run one prompt 30 times, manually label each response, and compare the empirical distribution over tone, cultural signal, and response type.",
+  "runs_per_prompt": 30,
+  "inference_params": {
+    "temperature": 0.7,
+    "top_p": 0.9,
+    "max_new_tokens": 128,
+    "do_sample": true,
+    "monte_carlo_samples": 5,
+    "emotional_lang": "en",
+    "mode": "factual"
+  },
+  "prompts": [
+    {
+      "prompt_id": "p1",
+      "prompt": "Explain the importance of discipline for long-term success.",
+      "prompt_type": "single_prompt_stability",
+      "condition": "baseline",
+      "notes": "Keep the prompt fixed across all 30 runs."
+    }
+  ],
+  "metrics": [
+    "P(tone)",
+    "P(cultural)",
+    "P(type)",
+    "joint pattern consistency",
+    "response length variance"
+  ]
+}

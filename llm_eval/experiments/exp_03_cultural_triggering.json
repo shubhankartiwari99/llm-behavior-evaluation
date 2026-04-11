@@ -1,0 +1,36 @@
+{
+  "experiment_id": "exp_03_cultural_triggering",
+  "title": "Cultural Triggering",
+  "objective": "Measure how much an India-specific cue changes the probability of Indian cultural context in the response.",
+  "hypothesis": "Adding an India-specific cue should increase P(strong_indian_context) and overall Indian-context rate.",
+  "description": "Compare a neutral prompt and an India-specific prompt that ask for the same kind of answer.",
+  "runs_per_prompt": 20,
+  "inference_params": {
+    "temperature": 0.7,
+    "top_p": 0.9,
+    "max_new_tokens": 128,
+    "do_sample": true,
+    "monte_carlo_samples": 5,
+    "emotional_lang": "en",
+    "mode": "factual"
+  },
+  "prompts": [
+    {
+      "prompt_id": "p1",
+      "prompt": "What are some practical ways a young professional can manage living expenses?",
+      "prompt_type": "neutral_prompt",
+      "condition": "neutral"
+    },
+    {
+      "prompt_id": "p2",
+      "prompt": "What are some practical ways a young professional in India can manage living expenses?",
+      "prompt_type": "india_specific_prompt",
+      "condition": "india_specific"
+    }
+  ],
+  "metrics": [
+    "P(cultural|prompt_type)",
+    "indian_context_rate delta",
+    "response type shift"
+  ]
+}
