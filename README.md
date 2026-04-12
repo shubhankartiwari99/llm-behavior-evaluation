@@ -9,11 +9,15 @@ Instead of treating model outputs as final, this work separates:
 - **raw model generation (pre-rescue)**
 - **post-processed runtime outputs (post-rescue)**
 
-and measures how runtime interventions affect:
-- entropy
-- diversity
-- behavioral distributions
-- cultural conditioning
+and measures how runtime interventions affect the distribution. These metrics capture different aspects:
+
+- **Entropy** → uncertainty within a distribution
+- **Collapse Ratio** → relative compression
+- **KL Divergence** → distance between distributions
+
+> Collapse ratio captures entropy reduction but not direction of change.
+> KL divergence captures how far the distribution moved.
+> Both are required for complete analysis.
 
 ---
 
@@ -32,6 +36,8 @@ We explicitly measure how inference-time policies change output distributions sa
 make dev
 ```
 2. Open: [http://localhost:3000](http://localhost:3000)
+
+> **Note:** By default, the system runs in mock mode for instant demo. Set `USE_MOCK=false` in `.env` to enable real model inference.
 
 Alternatively, start manually:
 - Backend: `uvicorn backend.app:app --reload --port 8000`
@@ -235,3 +241,27 @@ Active development — expanding:
 - conditional probability analysis
 - entropy-based evaluation
 - prompt sensitivity experiments
+
+---
+
+## ⚠️ Failure Modes & Limitations
+
+- Some prompts may bypass runtime shaping
+- KL divergence may remain low despite structural changes in very sparse probability spaces
+
+---
+
+## ⚡ Performance
+
+Typical latency:
+- Mock mode: ~50–200ms
+- Real inference: model-dependent
+
+---
+
+## 🔧 Extensibility
+
+The evaluation layer can be extended to:
+- new behavioral labels
+- alternative metrics (JS divergence, Wasserstein)
+- different model backends
