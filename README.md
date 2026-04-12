@@ -42,6 +42,11 @@ Alternatively, start manually:
 
 ---
 
+## 📸 UI Preview
+![ui](assets/screenshot.png)
+
+---
+
 ## 🔬 Key Insight
 
 Inference-time policies are not just guardrails — they act as:
@@ -106,6 +111,16 @@ This system shows that:
 - Introduction of **collapse_ratio** metric
 - Empirical analysis of **prompt-conditioned behavior**
 - Framework for **probabilistic LLM evaluation**
+
+---
+
+### 🔒 System Boundary
+
+This system explicitly separates:
+- model generation (stochastic)
+- runtime intervention (deterministic shaping)
+
+to ensure correct evaluation of LLM behavior.
 
 ---
 
@@ -191,6 +206,14 @@ python3 -m llm_eval.scripts.analyze_dataset \
 ## 🧭 Research Question
 
 How do inference-time interventions reshape the probability distribution of LLM behaviors under different prompt conditions?
+
+---
+
+## 🎯 Use Cases
+
+- ML Engineers → understand inference-time behavior
+- AI Reliability → evaluate system-level bias and stability
+- Researchers → study distribution shaping effects
 
 ---
 
