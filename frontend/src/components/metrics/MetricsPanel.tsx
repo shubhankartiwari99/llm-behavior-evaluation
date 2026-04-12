@@ -53,6 +53,14 @@ export default function MetricsPanel({ metrics, interventionType }: any) {
           <div className="mt-1 text-xs text-gray-500">Post-intervention</div>
         </div>
       </div>
+
+      <div className="mt-4 p-4 bg-gray-900 border border-gray-700/50 rounded-lg">
+        <h4 className="text-xs text-gray-400 uppercase tracking-widest mb-1">System Insight</h4>
+        <p className="text-sm text-gray-300 leading-relaxed">
+          Runtime intervention reduced entropy by {((1 - metrics.collapse_ratio) * 100).toFixed(0)}%, 
+          acting as a {collapseLabel.toLowerCase()} safety clamp while resolving to the standard baseline.
+        </p>
+      </div>
     </div>
   );
 }

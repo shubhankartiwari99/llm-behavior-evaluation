@@ -15,6 +15,14 @@ and measures how runtime interventions affect:
 
 ---
 
+## 🔍 What This Shows
+
+**Input** ➔ **Raw Model Output** ➔ **Runtime-Shaped Output**
+
+We explicitly measure how inference-time policies change output distributions safely and deterministically, without requiring model weight modifications.
+
+---
+
 ## ⚡ Quick Demo
 
 1. Start full stack (backend + frontend):
