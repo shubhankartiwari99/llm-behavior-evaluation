@@ -47,6 +47,12 @@ Alternatively, start manually:
 
 ## 🎥 Demo
 ![Inference Shaping Demo](assets/demo.gif)
+> Demonstration of raw vs runtime-shaped outputs, showing entropy reduction, KL divergence, and real-time inference pipeline behavior.
+
+This system isolates model stochasticity from runtime policy effects, enabling accurate evaluation of LLM behavior.
+
+If Kaggle endpoint is unavailable, the system automatically falls back to local inference.
+
 
 ---
 

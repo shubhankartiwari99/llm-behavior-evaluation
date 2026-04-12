@@ -1,7 +1,7 @@
 import React from "react";
 import { BarChart3, Zap, BrainCircuit, Lightbulb } from "lucide-react";
 
-export default function MetricsPanel({ metrics, interventionType }: any) {
+export default function MetricsPanel({ metrics, interventionType, metadata }: any) {
   if (!metrics) return null;
 
   const collapseLabel = metrics.collapse_ratio < 0.3 ? "Heavy shaping" : 
@@ -9,6 +9,10 @@ export default function MetricsPanel({ metrics, interventionType }: any) {
   
   const collapseColor = metrics.collapse_ratio < 0.3 ? "text-red-400" :
                         metrics.collapse_ratio < 0.6 ? "text-amber-400" : "text-emerald-400";
+
+  const klValue = metrics.kl_divergence || 0.0;
+  const klInterpretation = klValue < 0.1 ? "Minimal Shift" :
+                           klValue <= 0.5 ? "Moderate Transformation" : "Strong Behavioral Shift";
 
   let insightText = "";
   if (metrics.collapse_ratio < 0.3 && metrics.kl_divergence > 1.0) {
@@ -19,11 +23,28 @@ export default function MetricsPanel({ metrics, interventionType }: any) {
       insightText = "Moderate shaping. Target policies compressed entropy while managing distributional shift.";
   }
 
+  const formatSource = (src: string) => {
+      if (!src) return "Unknown";
+      if (src === "mock_inference_pipeline") return "Mock Pipeline";
+      if (src === "kaggle_qwen7b_pipeline") return "Kaggle (Qwen 7B)";
+      if (src === "gguf_inference_pipeline_fallback") return "Local GGUF (Fallback)";
+      if (src === "gguf_inference_pipeline") return "Local GGUF";
+      return src;
+  };
+
   return (
     <div className="space-y-4 p-5 border rounded-xl bg-slate-900/40 border-slate-800 shadow-2xl">
-      <div className="flex items-center gap-2 mb-2">
-         <BarChart3 className="w-4 h-4 text-slate-400" />
-         <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">System Trace Metrics</h3>
+      <div className="flex items-center justify-between mb-2">
+         <div className="flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-slate-400" />
+            <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">System Trace Metrics</h3>
+         </div>
+         {metadata && (
+            <div className="flex items-center gap-4 text-[10px] font-mono text-slate-500 uppercase tracking-wider">
+               <span>Mode: <span className="text-amber-400">{formatSource(metadata.source)}</span></span>
+               <span>Latency: <span className="text-cyan-400">{metadata.latency_ms}ms</span></span>
+            </div>
+         )}
       </div>
       
       {interventionType && (
@@ -50,9 +71,9 @@ export default function MetricsPanel({ metrics, interventionType }: any) {
             KL Divergence
           </div>
           <div className="flex items-baseline space-x-2">
-             <span className="text-3xl font-light tracking-tight text-purple-400">{metrics.kl_divergence?.toFixed(2) || "0.00"}</span>
+             <span className="text-3xl font-light tracking-tight text-purple-400">{klValue.toFixed(2)}</span>
           </div>
-          <div className="mt-1 text-[10px] font-medium text-slate-500 uppercase tracking-wider">Distribution Shift</div>
+          <div className="mt-1 text-[10px] font-medium text-purple-500/70 uppercase tracking-wider">{klInterpretation}</div>
         </div>
 
         <div className="p-4 bg-slate-950/50 rounded-lg border border-slate-800/80 hover:border-slate-700 transition-colors">

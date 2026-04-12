@@ -108,7 +108,7 @@ export default function Home() {
           {data && !loading && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out">
               <OutputComparison raw={data.raw_output} final={data.final_output} />
-              <MetricsPanel metrics={data.metrics} interventionType={data.intervention_type} />
+              <MetricsPanel metrics={data.metrics} interventionType={data.intervention_type} metadata={data.metadata} />
             </div>
           )}
         </div>
