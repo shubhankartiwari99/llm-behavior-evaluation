@@ -56,12 +56,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from typing import Optional
+
 class GenerateRequest(BaseModel):
     prompt: str
     mode: str = ""
     temperature: float = 0.0
     top_p: float = 1.0
     max_new_tokens: int = 512
+    use_mock: Optional[bool] = None
 
 @app.post("/generate")
 def generate(request: GenerateRequest):
@@ -88,9 +91,30 @@ def generate(request: GenerateRequest):
 import time
 import random
 import logging
+import requests
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 from typing import Dict, Any
 
 USE_MOCK = os.getenv("USE_MOCK", "true").lower() == "true"
+KAGGLE_URL = os.getenv("KAGGLE_URL", "")
+
+def call_kaggle(url: str, payload: dict, retries: int = 3, backoff_factor: float = 0.3) -> dict:
+    session = requests.Session()
+    retry = Retry(
+        total=retries,
+        read=retries,
+        connect=retries,
+        backoff_factor=backoff_factor,
+        status_forcelist=(500, 502, 504),
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
+    
+    res = session.post(url, json=payload, timeout=30)
+    res.raise_for_status()
+    return res.json()
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -106,8 +130,10 @@ def infer(request: GenerateRequest) -> Dict[str, Any]:
         if not request.prompt.strip():
             raise HTTPException(status_code=400, detail="Prompt cannot be empty")
             
-        if USE_MOCK:
-            logging.info("USE_MOCK enabled. Simulating distribution shaping pipeline...")
+        is_mock = request.use_mock if request.use_mock is not None else USE_MOCK
+        
+        if is_mock:
+            logging.info("Mock mode enabled. Simulating distribution shaping pipeline...")
             time.sleep(1.0)
             prompt_lower = request.prompt.lower()
             
@@ -149,18 +175,49 @@ def infer(request: GenerateRequest) -> Dict[str, Any]:
             }
         
         # Real Inference Path
-        logging.info("Engaging dynamic GGUF pipeline...")
         full_prompt = build_prompt(request.mode, request.prompt)
         
-        raw_result = get_backend().generate(
-            prompt=full_prompt,
-            max_new_tokens=request.max_new_tokens,
-            temperature=max(request.temperature, 0.7),
-            top_p=request.top_p,
-            repeat_penalty=1.1,
-        )
-        
-        raw_out = raw_result["text"]
+        if KAGGLE_URL:
+            logging.info("Engaging Kaggle (Qwen 7B) pipeline via ngrok...")
+            try:
+                start_time = time.time()
+                payload = {
+                    "prompt": full_prompt,
+                    "max_new_tokens": request.max_new_tokens,
+                    "temperature": max(request.temperature, 0.7),
+                    "top_p": request.top_p
+                }
+                raw_result = call_kaggle(KAGGLE_URL, payload)
+                raw_out = raw_result.get("response_text", raw_result.get("text", ""))
+                latency = int((time.time() - start_time) * 1000)
+                source = "kaggle_qwen7b_pipeline"
+            except Exception as e:
+                logging.warning(f"Kaggle inference failed: {e}. Falling back to local GGUF...")
+                logging.info("Engaging fallback local GGUF pipeline...")
+                start_time = time.time()
+                raw_result = get_backend().generate(
+                    prompt=full_prompt,
+                    max_new_tokens=request.max_new_tokens,
+                    temperature=max(request.temperature, 0.7),
+                    top_p=request.top_p,
+                    repeat_penalty=1.1,
+                )
+                raw_out = raw_result["text"]
+                latency = int((time.time() - start_time) * 1000)
+                source = "gguf_inference_pipeline_fallback"
+        else:
+            logging.info("Engaging dynamic local GGUF pipeline...")
+            start_time = time.time()
+            raw_result = get_backend().generate(
+                prompt=full_prompt,
+                max_new_tokens=request.max_new_tokens,
+                temperature=max(request.temperature, 0.7),
+                top_p=request.top_p,
+                repeat_penalty=1.1,
+            )
+            raw_out = raw_result["text"]
+            latency = int((time.time() - start_time) * 1000)
+            source = "gguf_inference_pipeline"
         
         return {
             "raw_output": raw_out,
@@ -173,9 +230,9 @@ def infer(request: GenerateRequest) -> Dict[str, Any]:
                 "stage_change_rate": 0.0
             },
             "metadata": {
-                "latency_ms": 2500,
+                "latency_ms": latency,
                 "tokens": len(raw_out.split()),
-                "source": "gguf_inference_pipeline"
+                "source": source
             },
             "intervention_type": "semantic_preservation"
         }

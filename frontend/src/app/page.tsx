@@ -8,6 +8,7 @@ import MetricsPanel from "@/components/metrics/MetricsPanel"
 
 export default function Home() {
   const [prompt, setPrompt] = useState("")
+  const [useMock, setUseMock] = useState(true)
   const { data, execute, loading } = useInference()
 
   return (
@@ -34,12 +35,24 @@ export default function Home() {
         {/* Sidebar Controls */}
         <div className="lg:col-span-4 space-y-6">
           <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-5 shadow-2xl">
-            <div className="flex items-center gap-2 mb-4">
-              <Settings2 className="w-4 h-4 text-slate-400" />
-              <h2 className="text-xs font-bold uppercase tracking-widest text-slate-400">Inference Parameters</h2>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Settings2 className="w-4 h-4 text-slate-400" />
+                <h2 className="text-xs font-bold uppercase tracking-widest text-slate-400">Inference Parameters</h2>
+              </div>
             </div>
             
             <div className="space-y-4">
+              <div className="flex items-center justify-between bg-slate-950 p-3 rounded-lg border border-slate-800/50">
+                <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400">Mode: <span className={useMock ? "text-cyan-400" : "text-amber-400"}>{useMock ? 'Mock (Fast)' : 'Real (Kaggle/Local)'}</span></span>
+                <button
+                  onClick={() => setUseMock(!useMock)}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${useMock ? 'bg-cyan-500' : 'bg-slate-700'}`}
+                >
+                  <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${useMock ? 'translate-x-5' : 'translate-x-1'}`} />
+                </button>
+              </div>
+
               <div>
                 <label className="text-[10px] uppercase font-bold tracking-widest text-slate-500 mb-2 block">Instruction Prompt</label>
                 <textarea
@@ -51,7 +64,7 @@ export default function Home() {
               </div>
 
               <button
-                onClick={() => execute({ prompt })}
+                onClick={() => execute({ prompt, use_mock: useMock })}
                 disabled={loading || !prompt.trim()}
                 className="w-full flex items-center justify-center gap-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 px-6 py-3.5 text-xs font-bold uppercase tracking-widest transition-all shadow-[0_0_20px_rgba(6,182,212,0.15)] disabled:shadow-none"
               >
