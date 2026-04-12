@@ -29,22 +29,6 @@ We explicitly measure how inference-time policies change output distributions sa
 
 ---
 
-## ⚡ Quick Demo
-
-1. Start full stack (backend + frontend):
-```bash
-make dev
-```
-2. Open: [http://localhost:3000](http://localhost:3000)
-
-> **Note:** By default, the system runs in mock mode for instant demo. Set `USE_MOCK=false` in `.env` to enable real model inference.
-
-Alternatively, start manually:
-- Backend: `uvicorn backend.app:app --reload --port 8000`
-- Frontend: `cd frontend && npm run dev`
-
----
-
 ## 🎥 Demo
 ![Inference Shaping Demo](assets/demo.gif)
 > Demonstration of raw vs runtime-shaped outputs, showing entropy reduction, KL divergence, and real-time inference pipeline behavior.
