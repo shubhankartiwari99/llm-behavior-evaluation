@@ -1,9 +1,21 @@
 import os
-from inference.gguf_backend import GGUFBackend
 
 MODEL_PATH = os.getenv("MODEL_PATH", "models/nanbeige-4.1-3b-q4kam.gguf")
 
-backend = GGUFBackend(model_path=MODEL_PATH)
+_backend = None
+def get_backend():
+    global _backend
+    if _backend is None:
+        import sys
+        
+        # Ensure we can import from backend.inference when run from root
+        root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        if root_dir not in sys.path:
+            sys.path.append(root_dir)
+            
+        from backend.inference.gguf_backend import GGUFBackend
+        _backend = GGUFBackend(model_path=MODEL_PATH)
+    return _backend
 
 def build_prompt(mode: str, user_prompt: str) -> str:
     if mode == "factual":
@@ -58,7 +70,7 @@ def generate(request: GenerateRequest):
         
     full_prompt = build_prompt(request.mode, request.prompt)
     
-    result = backend.generate(
+    result = get_backend().generate(
         prompt=full_prompt,
         max_new_tokens=request.max_new_tokens,
         temperature=request.temperature,
@@ -140,7 +152,7 @@ def infer(request: GenerateRequest) -> Dict[str, Any]:
         logging.info("Engaging dynamic GGUF pipeline...")
         full_prompt = build_prompt(request.mode, request.prompt)
         
-        raw_result = backend.generate(
+        raw_result = get_backend().generate(
             prompt=full_prompt,
             max_new_tokens=request.max_new_tokens,
             temperature=max(request.temperature, 0.7),
