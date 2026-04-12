@@ -6,6 +6,7 @@ export interface InferenceResponse {
     entropy_raw: number;
     entropy_final: number;
     collapse_ratio: number;
+    kl_divergence: number;
     stage_change_rate: number;
   };
 

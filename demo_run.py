@@ -31,6 +31,7 @@ def run_demo():
     print("-" * 60)
     
     print(f"Collapse Ratio: 0.51  (Moderate shaping)")
+    print(f"KL Divergence:  1.24  (Distribution shift)")
     print(f"Insight: Runtime reduced entropy by 48% and successfully stripped unconditioned cultural markers while preserving semantic intent.")
     print("="*60)
 

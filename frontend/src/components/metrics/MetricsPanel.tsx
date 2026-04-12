@@ -38,12 +38,12 @@ export default function MetricsPanel({ metrics, interventionType }: any) {
 
         <div className="p-4 bg-slate-950/50 rounded-lg border border-slate-800/80 hover:border-slate-700 transition-colors">
           <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2 flex items-center gap-1.5">
-            Stage Change
+            KL Divergence
           </div>
           <div className="flex items-baseline space-x-2">
-             <span className="text-3xl font-light tracking-tight text-slate-200">{(metrics.stage_change_rate * 100).toFixed(0)}%</span>
+             <span className="text-3xl font-light tracking-tight text-purple-400">{metrics.kl_divergence?.toFixed(2) || "0.00"}</span>
           </div>
-          <div className="mt-1 text-[10px] font-medium text-slate-500 uppercase tracking-wider">Trigger Rate</div>
+          <div className="mt-1 text-[10px] font-medium text-slate-500 uppercase tracking-wider">Distribution Shift</div>
         </div>
 
         <div className="p-4 bg-slate-950/50 rounded-lg border border-slate-800/80 hover:border-slate-700 transition-colors">
