@@ -30,7 +30,7 @@ We explicitly measure how inference-time policies change output distributions sa
 ---
 
 ## 🎥 Demo
-![Inference Shaping Demo](assets/demo.gif)
+![Inference Shaping Demo](assets/demo.webp)
 > Demonstration of raw vs runtime-shaped outputs, showing entropy reduction, KL divergence, and real-time inference pipeline behavior.
 
 ## 🔁 Inference Modes
