@@ -2,6 +2,9 @@
 
 > **A system for analyzing how inference-time policies reshape LLM output distributions.**
 
+> **Note:** This is an earlier iteration / research exploration.
+> This work evolved into llm-generation-control : https://github.com/shubhankartiwari99/llm-generation-control
+
 This project is a **systems-level evaluation framework** for analyzing how inference-time runtime policies reshape Large Language Model (LLM) output distributions.
 
 Instead of treating model outputs as final, this work separates:
@@ -235,10 +238,8 @@ This project sits at the intersection of:
 
 ## 📌 Status
 
-Active development — expanding:
-- conditional probability analysis
-- entropy-based evaluation
-- prompt sensitivity experiments
+Superseded / Earlier Iteration.
+This work evolved into llm-generation-control : https://github.com/shubhankartiwari99/llm-generation-control
 
 ---
 
