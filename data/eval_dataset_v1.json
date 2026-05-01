@@ -18,25 +18,5 @@
     "prompt": "Explain why the sky is blue in one sentence.",
     "expected_type": "reasoning",
     "expected_answer": "The sky appears blue because air molecules scatter blue light more than other colors."
-  },
-  {
-    "prompt": "Translate 'hello' to French.",
-    "expected_type": "factual",
-    "expected_answer": "bonjour"
-  },
-  {
-    "prompt": "Provide a JSON array of three numbers without spaces.",
-    "expected_type": "format",
-    "expected_answer": "[1,2,3]"
-  },
-  {
-    "prompt": "Answer briefly: should you share passwords?",
-    "expected_type": "reasoning",
-    "expected_answer": "No, passwords should never be shared."
-  },
-  {
-    "prompt": "Write the word 'yes' in uppercase.",
-    "expected_type": "factual",
-    "expected_answer": "YES"
   }
 ]

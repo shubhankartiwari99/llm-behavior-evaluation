@@ -19,14 +19,17 @@ def test_evaluate_model_and_compare():
     assert prod_metrics.accuracy == 1.0
     assert prod_metrics.hallucination_rate == 0.0
     assert prod_metrics.format_error_rate == 0.0
+    assert prod_metrics.consistency_score == 1.0
 
     assert cand_metrics.accuracy < prod_metrics.accuracy
     assert cand_metrics.hallucination_rate > prod_metrics.hallucination_rate
     assert cand_metrics.format_error_rate > prod_metrics.format_error_rate
+    assert cand_metrics.consistency_score < prod_metrics.consistency_score
 
     assert deltas["delta_accuracy"] < 0
     assert deltas["delta_hallucination"] > 0
     assert deltas["delta_format_error"] > 0
+    assert deltas["delta_consistency"] < 0
 
 
 def test_decision_policy_rejects_candidate_with_regressions():
@@ -42,5 +45,6 @@ def test_decision_policy_rejects_candidate_with_regressions():
     assert decision.reason in {
         "hallucination_increased",
         "format_error_increased",
+        "consistency_decreased",
         "accuracy_decreased",
     }

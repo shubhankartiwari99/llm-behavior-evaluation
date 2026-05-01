@@ -11,12 +11,14 @@ class EvaluationMetrics:
     accuracy: float
     hallucination_rate: float
     format_error_rate: float
+    consistency_score: float
 
     def to_dict(self) -> dict[str, float]:
         return {
             "accuracy": round(self.accuracy, 6),
             "hallucination_rate": round(self.hallucination_rate, 6),
             "format_error_rate": round(self.format_error_rate, 6),
+            "consistency_score": round(self.consistency_score, 6),
         }
 
 
@@ -48,42 +50,65 @@ def is_json_array(value: str) -> bool:
     return isinstance(parsed, list)
 
 
+def _ensure_output_variants(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [normalize_text(str(item)) for item in value]
+    return [normalize_text(str(value))]
+
+
 def evaluate_model(model: dict[str, Any], dataset: list[dict[str, Any]]) -> EvaluationMetrics:
     responses = model["responses"]
-    total_examples = len(dataset)
-    if total_examples == 0:
-        return EvaluationMetrics(accuracy=0.0, hallucination_rate=0.0, format_error_rate=0.0)
+    total_prompts = len(dataset)
+    if total_prompts == 0:
+        return EvaluationMetrics(
+            accuracy=0.0,
+            hallucination_rate=0.0,
+            format_error_rate=0.0,
+            consistency_score=0.0,
+        )
 
-    correct = 0
-    hallucinations = 0
+    total_outputs = 0
+    correct_outputs = 0
+    hallucinated_outputs = 0
+    format_outputs = 0
     format_errors = 0
-    format_examples = 0
+    consistent_prompts = 0
 
     for item in dataset:
         prompt = item["prompt"]
         expected_type = item["expected_type"]
         expected_answer = item.get("expected_answer", "")
-        output = normalize_text(str(responses.get(prompt, "")))
-        normalized_expected = normalize_text(str(expected_answer))
+        expected_normalized = normalize_text(str(expected_answer))
 
-        if output and normalized_expected and output == normalized_expected:
-            correct += 1
-        else:
-            hallucinations += 1
+        raw_output = responses.get(prompt, "")
+        outputs = _ensure_output_variants(raw_output)
+        unique_outputs = set(outputs)
 
-        if expected_type == "format":
-            format_examples += 1
-            if not is_json_array(responses.get(prompt, "")):
-                format_errors += 1
+        if len(unique_outputs) == 1:
+            consistent_prompts += 1
 
-    accuracy = correct / total_examples
-    hallucination_rate = hallucinations / total_examples
-    format_error_rate = format_errors / max(1, format_examples)
+        for output in outputs:
+            total_outputs += 1
+            if output and expected_normalized and output == expected_normalized:
+                correct_outputs += 1
+            else:
+                hallucinated_outputs += 1
+
+            if expected_type == "format":
+                format_outputs += 1
+                if not is_json_array(output):
+                    format_errors += 1
+
+    accuracy = correct_outputs / max(1, total_outputs)
+    hallucination_rate = hallucinated_outputs / max(1, total_outputs)
+    format_error_rate = format_errors / max(1, format_outputs)
+    consistency_score = consistent_prompts / total_prompts
 
     return EvaluationMetrics(
         accuracy=accuracy,
         hallucination_rate=hallucination_rate,
         format_error_rate=format_error_rate,
+        consistency_score=consistency_score,
     )
 
 
@@ -92,6 +117,7 @@ def compare_models(prod_metrics: EvaluationMetrics, cand_metrics: EvaluationMetr
         "delta_accuracy": round(cand_metrics.accuracy - prod_metrics.accuracy, 6),
         "delta_hallucination": round(cand_metrics.hallucination_rate - prod_metrics.hallucination_rate, 6),
         "delta_format_error": round(cand_metrics.format_error_rate - prod_metrics.format_error_rate, 6),
+        "delta_consistency": round(cand_metrics.consistency_score - prod_metrics.consistency_score, 6),
     }
 
 
@@ -121,6 +147,12 @@ def decide_promotion(prod_metrics: EvaluationMetrics, cand_metrics: EvaluationMe
         return Decision(
             decision="reject",
             reason="format_error_increased",
+            deltas=deltas,
+        )
+    if deltas["delta_consistency"] < 0:
+        return Decision(
+            decision="reject",
+            reason="consistency_decreased",
             deltas=deltas,
         )
     if deltas["delta_accuracy"] < 0:

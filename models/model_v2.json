@@ -4,6 +4,13 @@
     "What is 2 + 2?": "4",
     "Who wrote Hamlet?": "A famous playwright wrote it.",
     "List three primary colors in a JSON array.": "red, blue, yellow",
-    "Explain why the sky is blue in one sentence.": "Because molecules in the air scatter light."
+    "Explain why the sky is blue in one sentence.": [
+      "Because molecules in the air scatter blue light.",
+      "Because the atmosphere scatters blue light more than other colors."
+    ],
+    "Translate 'hello' to French.": "bonjour",
+    "Provide a JSON array of three numbers without spaces.": "[1, 2, 3]",
+    "Answer briefly: should you share passwords?": "No, passwords should never be shared.",
+    "Write the word 'yes' in uppercase.": "YES"
   }
 }
