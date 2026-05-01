@@ -212,7 +212,35 @@ python3 -m llm_eval.scripts.analyze_dataset \
 
 ---
 
-## 🧭 Research Question
+## � LLM Regression Detection System
+This repository now includes a lightweight governance layer for model version promotion.
+
+### What it solves
+Prevents silent behavioral regressions when a new model version is compared against a frozen evaluation set.
+
+### Why it matters
+A model can improve on one metric while worsening more important safety or format behavior.
+
+### System components
+- `data/eval_dataset.json` — frozen, versioned evaluation set
+- `models/model_v1.json`, `models/model_v2.json` — versioned model responses
+- `scripts/regression_engine.py` — structured behavioral metrics + decision policy
+- `scripts/run_regression_check.py` — runner with explicit promote/reject output
+- `artifacts/decision_history.json` — audit trail for every check
+- `scripts/ci_regression_gate.py` — CI-friendly promotion gate
+
+### CI gate usage
+```bash
+python3 scripts/ci_regression_gate.py \
+  --prod models/model_v1.json \
+  --cand models/model_v2.json
+```
+
+This command exits with `0` when the candidate passes promotion policy, and `1` when it is rejected.
+
+---
+
+## �🧭 Research Question
 
 How do inference-time interventions reshape the probability distribution of LLM behaviors under different prompt conditions?
 

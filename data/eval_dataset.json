@@ -1,0 +1,22 @@
+[
+  {
+    "prompt": "What is 2 + 2?",
+    "expected_type": "factual",
+    "expected_answer": "4"
+  },
+  {
+    "prompt": "Who wrote Hamlet?",
+    "expected_type": "factual",
+    "expected_answer": "William Shakespeare"
+  },
+  {
+    "prompt": "List three primary colors in a JSON array.",
+    "expected_type": "format",
+    "expected_answer": "[\"red\", \"blue\", \"yellow\"]"
+  },
+  {
+    "prompt": "Explain why the sky is blue in one sentence.",
+    "expected_type": "reasoning",
+    "expected_answer": "The sky appears blue because air molecules scatter blue light more than other colors."
+  }
+]

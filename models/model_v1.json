@@ -1,0 +1,9 @@
+{
+  "model_id": "model_v1",
+  "responses": {
+    "What is 2 + 2?": "4",
+    "Who wrote Hamlet?": "William Shakespeare",
+    "List three primary colors in a JSON array.": "[\"red\", \"blue\", \"yellow\"]",
+    "Explain why the sky is blue in one sentence.": "The sky appears blue because air molecules scatter blue light more than other colors."
+  }
+}
